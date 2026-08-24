@@ -12,6 +12,7 @@
     "demo:day5": "tsx src/demo-day5.ts",
     "demo:day6": "tsx src/demo-day6.ts",
     "demo:day7": "tsx src/demo-day7.ts",
+    "demo:day8": "tsx src/demo-day8.ts",
     "start:server": "tsx src/server.ts",
     "build": "tsc"
   },
@@ -26,9 +27,11 @@
   "license": "MIT",
   "type": "module",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
+    "openai": "^7.5.0",
     "razorpay": "^2.9.8"
   },
   "devDependencies": {

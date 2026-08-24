@@ -2,6 +2,7 @@ import { dispatchToolCall } from './toolDispatcher.js';
 import { AgentResponse, AgentThoughtStep } from './types.js';
 import { getCartSummary } from '../cart/cartManager.js';
 import { evaluateCartRisk } from '../security/riskEngine.js';
+import { interceptNearHallucination } from '../recovery/hallucinationGuard.js';
 import {
   getSessionGate,
   recordExplicitHumanConfirmation
@@ -64,6 +65,23 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
     lowerMsg === 'proceed to payment' ||
     lowerMsg.includes('yes, confirm') ||
     lowerMsg.includes('confirm order');
+
+  // Guard 0: Day 8 Near-Hallucination Interception (Catches out-of-catalog entities)
+  const hallucinationCheck = interceptNearHallucination(sessionId, userMessage);
+  if (hallucinationCheck.isHallucination) {
+    const step: AgentThoughtStep = {
+      stepIndex: 1,
+      thought: `Near-hallucination guardrail intercepted query for "${hallucinationCheck.detectedUncataloguedEntity}". Grounding reply with real catalog items.`
+    };
+    thoughtSteps.push(step);
+    return {
+      sessionId,
+      userMessage,
+      assistantReply: `I checked our inventory, but ${hallucinationCheck.groundedCorrection}\n\nWould you like to explore any of these?`,
+      thoughtSteps,
+      cartSummary: getCartSummary(sessionId)
+    };
+  }
 
   if (isExplicitConfirmation && gate.state === 'REVIEWING_ORDER') {
     // Record human confirmation
