@@ -764,6 +764,8 @@
         </div>
       `;
 
+      document.body.appendChild(modalDiv);
+
       const tabUpi = document.getElementById('tabUpi');
       const tabCard = document.getElementById('tabCard');
       const upiView = document.getElementById('upiView');
@@ -840,6 +842,9 @@
         }
       };
     }
+
+    window.triggerRazorpayCheckout = triggerRazorpayCheckout;
+    window.showInAppRazorpayModal = showInAppRazorpayModal;
 
     function updateCartUI(summary) {
       if (!summary) return;
