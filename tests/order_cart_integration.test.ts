@@ -101,7 +101,12 @@ describe('Day 3 Checkpoint: Cart to Razorpay Order & Webhook Pipeline', () => {
       expect(processResult.success).toBe(true);
       expect(processResult.statusUpdatedTo).toBe('captured');
 
-      // 3. Verify Internal Order State is now CAPTURED
+      // 3. Test Webhook Idempotency: second delivery should be safely handled
+      const duplicateResult = processWebhookEvent(webhookPayload);
+      expect(duplicateResult.success).toBe(true);
+      expect(duplicateResult.statusUpdatedTo).toBe('captured (idempotent)');
+
+      // 4. Verify Internal Order State is still CAPTURED
       const updatedOrder = getOrderById(internalOrderId);
       expect(updatedOrder?.status).toBe('captured');
       expect(updatedOrder?.razorpayPaymentId).toBe('pay_rzp_mock_payment_999');

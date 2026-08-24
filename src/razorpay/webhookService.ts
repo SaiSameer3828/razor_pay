@@ -104,6 +104,19 @@ export function processWebhookEvent(payload: RazorpayWebhookPayload): WebhookPro
   switch (event) {
     case 'payment.captured':
     case 'order.paid': {
+      // Idempotency check: If order is already captured, safely acknowledge without duplicate processing
+      if (existingOrder.status === 'captured') {
+        return {
+          success: true,
+          event,
+          orderId: existingOrder.id,
+          razorpayOrderId,
+          paymentId: paymentId || existingOrder.razorpayPaymentId,
+          statusUpdatedTo: 'captured (idempotent)',
+          message: `Order #${existingOrder.id} was already captured. Webhook processed idempotently.`
+        };
+      }
+
       const updated = updateOrderStatus(razorpayOrderId, 'captured', {
         paymentId: paymentId || existingOrder.razorpayPaymentId
       });
@@ -119,6 +132,18 @@ export function processWebhookEvent(payload: RazorpayWebhookPayload): WebhookPro
     }
 
     case 'payment.failed': {
+      if (existingOrder.status === 'failed') {
+        return {
+          success: true,
+          event,
+          orderId: existingOrder.id,
+          razorpayOrderId,
+          paymentId,
+          statusUpdatedTo: 'failed (idempotent)',
+          message: `Order #${existingOrder.id} was already marked failed. Webhook processed idempotently.`
+        };
+      }
+
       const failureReason = paymentEntity?.error_description || paymentEntity?.error_reason || 'Payment failed at gateway';
       const updated = updateOrderStatus(razorpayOrderId, 'failed', {
         paymentId,

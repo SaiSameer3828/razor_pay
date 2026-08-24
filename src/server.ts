@@ -16,13 +16,36 @@ export function createApp() {
 
   app.use(cors());
 
-  // Capture raw body for webhook signature verification while still parsing JSON for other routes
-  app.use(express.json({
-    verify: (req: any, _res, buf) => {
-      req.rawBody = buf.toString();
-    }
-  }));
+  // Webhook route MUST receive exact raw buffer before any JSON parsing
+  app.post('/api/webhooks/razorpay', express.raw({ type: 'application/json' }), (req: Request, res: Response): void => {
+    const signature = req.headers['x-razorpay-signature'] as string;
+    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : (typeof req.body === 'string' ? req.body : JSON.stringify(req.body));
 
+    if (!signature) {
+      res.status(400).json({ success: false, message: 'Missing X-Razorpay-Signature header' });
+      return;
+    }
+
+    const isValid = verifyWebhookSignature(rawBody, signature);
+    if (!isValid) {
+      console.warn('⚠️ [WEBHOOK REJECTED] Invalid X-Razorpay-Signature received.');
+      res.status(400).json({ success: false, message: 'Invalid webhook signature' });
+      return;
+    }
+
+    try {
+      const eventPayload = JSON.parse(rawBody) as RazorpayWebhookPayload;
+      const result = processWebhookEvent(eventPayload);
+
+      console.log(`🔔 [WEBHOOK PROCESSED] Event: ${result.event} | Status: ${result.statusUpdatedTo || 'OK'} | Order: ${result.orderId || result.razorpayOrderId}`);
+      res.status(200).json(result);
+    } catch (err) {
+      res.status(500).json({ success: false, error: (err as Error).message });
+    }
+  });
+
+  // Standard JSON body parser for all other application routes
+  app.use(express.json());
   app.use(express.static(path.join(__dirname, '../public')));
 
   // Mode & Health Check
@@ -70,35 +93,7 @@ export function createApp() {
     }
   });
 
-  // ==========================================
-  // DAY 3: SERVER-TO-SERVER WEBHOOK HANDLER
-  // ==========================================
-  app.post('/api/webhooks/razorpay', (req: Request, res: Response): Promise<void> => {
-    const signature = req.headers['x-razorpay-signature'] as string;
-    const rawBody = (req as any).rawBody || JSON.stringify(req.body);
 
-    if (!signature) {
-      res.status(400).json({ success: false, message: 'Missing X-Razorpay-Signature header' });
-      return;
-    }
-
-    const isValid = verifyWebhookSignature(rawBody, signature);
-    if (!isValid) {
-      console.warn('⚠️ [WEBHOOK REJECTED] Invalid X-Razorpay-Signature received.');
-      res.status(400).json({ success: false, message: 'Invalid webhook signature' });
-      return;
-    }
-
-    try {
-      const eventPayload = req.body as RazorpayWebhookPayload;
-      const result = processWebhookEvent(eventPayload);
-
-      console.log(`🔔 [WEBHOOK PROCESSED] Event: ${result.event} | Status: ${result.statusUpdatedTo || 'OK'} | Order: ${result.orderId || result.razorpayOrderId}`);
-      res.status(200).json(result);
-    } catch (err) {
-      res.status(500).json({ success: false, error: (err as Error).message });
-    }
-  });
 
   // Client-Side Payment Verification (Handles immediate UX feedback)
   app.post('/api/payment/verify', (req: Request, res: Response): Promise<void> => {
