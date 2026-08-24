@@ -1,5 +1,6 @@
 import { CartSummary } from '../cart/types.js';
 import { recordAuditLog } from '../audit/auditLogger.js';
+import { evaluateCartRisk } from '../security/riskEngine.js';
 
 export type ConfirmationState = 'SHOPPING' | 'REVIEWING_ORDER' | 'CONFIRMED_READY_FOR_PAYMENT' | 'PAYMENT_PROCESSED';
 
@@ -130,6 +131,23 @@ export function evaluatePaymentGate(
       turnIndex: 0,
       type: 'GATE_EVALUATION',
       thought: `Blocked payment initiation: Cart has inventory/stock warnings: ${currentCart.validationWarnings.join(', ')}`,
+      outcome: 'BLOCKED',
+      reason,
+      stateBefore: gate.state,
+      stateAfter: gate.state
+    });
+    return { allowed: false, reason };
+  }
+
+  // Guard 2.5: Day 7 Risk & Safety Bounds Check
+  const risk = evaluateCartRisk(currentCart);
+  if (risk.isBlocked) {
+    const reason = `BLOCKED: ${risk.blockedReason}`;
+    recordAuditLog({
+      sessionId,
+      turnIndex: 0,
+      type: 'GATE_EVALUATION',
+      thought: `Security Gate BLOCKED high-risk order (Risk Score: ${risk.riskScore}/100). Factors: ${risk.factors.join(', ')}.`,
       outcome: 'BLOCKED',
       reason,
       stateBefore: gate.state,

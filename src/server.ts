@@ -76,17 +76,19 @@ export function createApp() {
   // DAY 6: REAL-TIME AUDIT STREAM (SSE) & LOGS API
   // ==========================================
   app.get('/api/audit/stream', (req: Request, res: Response): void => {
+    const sessionId = req.query.sessionId as string;
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    // Send initial heartbeat
-    res.write(`data: ${JSON.stringify({ type: 'HEARTBEAT', timestamp: new Date().toISOString() })}\n\n`);
+    // Send initial heartbeat with session confirmation
+    res.write(`data: ${JSON.stringify({ type: 'HEARTBEAT', sessionId: sessionId || 'ALL', timestamp: new Date().toISOString() })}\n\n`);
 
     const unsubscribe = subscribeToAuditStream(entry => {
       res.write(`data: ${JSON.stringify(entry)}\n\n`);
-    });
+    }, sessionId);
 
     req.on('close', () => {
       unsubscribe();

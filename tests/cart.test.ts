@@ -232,11 +232,12 @@ describe('Day 1 Checkpoint: Catalog & Pure Cart Engine', () => {
     });
 
     it('prevents adding quantity exceeding available inventory', () => {
-      const variant = getVariantById('prod_oxford_shirt', 'var_ox_blu_l');
-      const maxStock = variant!.stock; // e.g. 10
+      // var_blz_nvy_42 has stock = 4
+      const variant = getVariantById('prod_linen_blazer', 'var_blz_nvy_42');
+      const maxStock = variant!.stock; // 4
 
-      // Attempt to add stock + 5
-      const res = addToCart(CART_ID, 'prod_oxford_shirt', 'var_ox_blu_l', maxStock + 5);
+      // Attempt to add 5 (within SKU limit of 5, but exceeds warehouse stock of 4)
+      const res = addToCart(CART_ID, 'prod_linen_blazer', 'var_blz_nvy_42', 5);
       expect(res.success).toBe(false);
       expect(res.error).toBe('INSUFFICIENT_STOCK');
       expect(res.message).toContain(`Stock limit is ${maxStock}`);

@@ -452,9 +452,9 @@
   <script>
     const SESSION_ID = 'session_web_' + Date.now();
 
-    // 1. Establish Server-Sent Events (SSE) Live Audit Stream
+    // 1. Establish Server-Sent Events (SSE) Live Audit Stream (Session Scoped)
     function initAuditStream() {
-      const eventSource = new EventSource('/api/audit/stream');
+      const eventSource = new EventSource('/api/audit/stream?sessionId=' + encodeURIComponent(SESSION_ID));
 
       eventSource.onmessage = function(event) {
         try {

@@ -192,6 +192,16 @@ export function addToCart(cartId: string, productId: string, variantId: string, 
   const currentQtyInCart = existingItemIndex >= 0 ? cart.items[existingItemIndex].quantity : 0;
   const newTotalQty = currentQtyInCart + quantity;
 
+  // Day 7 Bound: Maximum 5 units per SKU for conversational checkout
+  if (newTotalQty > 5) {
+    return {
+      success: false,
+      message: `Cannot add ${quantity} item(s). Conversational limit is 5 units per item (you already have ${currentQtyInCart} in cart).`,
+      error: 'EXCEEDS_MAX_QUANTITY_PER_SKU',
+      cart: getCartSummary(cartId)
+    };
+  }
+
   if (newTotalQty > variant.stock) {
     return {
       success: false,
@@ -229,6 +239,15 @@ export function updateQuantity(cartId: string, productId: string, variantId: str
   if (quantity <= 0) {
     // If quantity is 0 or negative, remove the item
     return removeFromCart(cartId, productId, variantId);
+  }
+
+  if (quantity > 5) {
+    return {
+      success: false,
+      message: `Requested quantity (${quantity}) exceeds maximum conversational order limit (5 units per SKU).`,
+      error: 'EXCEEDS_MAX_QUANTITY_PER_SKU',
+      cart: getCartSummary(cartId)
+    };
   }
 
   const variant = getVariantById(productId, variantId);

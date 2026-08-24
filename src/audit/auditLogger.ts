@@ -46,11 +46,18 @@ export function getAllAuditLogs(limit: number = 100): AuditLogEntry[] {
 
 /**
  * Subscribes to live audit log stream (used by Server-Sent Events endpoint)
+ * If sessionId is specified, only events for that session will be delivered.
  */
-export function subscribeToAuditStream(subscriber: AuditSubscriber): () => void {
-  subscribers.add(subscriber);
+export function subscribeToAuditStream(subscriber: AuditSubscriber, sessionId?: string): () => void {
+  const filteredSubscriber: AuditSubscriber = (entry: AuditLogEntry) => {
+    if (!sessionId || entry.sessionId === sessionId) {
+      subscriber(entry);
+    }
+  };
+
+  subscribers.add(filteredSubscriber);
   return () => {
-    subscribers.delete(subscriber);
+    subscribers.delete(filteredSubscriber);
   };
 }
 

@@ -1,6 +1,7 @@
 import { dispatchToolCall } from './toolDispatcher.js';
 import { AgentResponse, AgentThoughtStep } from './types.js';
 import { getCartSummary } from '../cart/cartManager.js';
+import { evaluateCartRisk } from '../security/riskEngine.js';
 import {
   getSessionGate,
   recordExplicitHumanConfirmation
@@ -83,7 +84,7 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
       const rzp = paymentRes.result.razorpayOrder;
       assistantReply = `🎉 **Order #${order.id} Created!**\n\n• **Amount:** ₹${(order.totalInPaise / 100).toFixed(2)}\n• **Razorpay Order ID:** \`${rzp.id}\`\n\nYour payment window is now open. Complete the 2FA/UPI verification to finalize your order!`;
     } else {
-      assistantReply = `⚠️ Payment initiation blocked: ${paymentRes.result.error}`;
+      assistantReply = "⚠️ Let's review your order details first before we proceed to payment. Say *'checkout'* to see your locked order review card!";
     }
   }
 
@@ -104,19 +105,30 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
     } else if (!summary.isReadyForCheckout) {
       assistantReply = `⚠️ Cannot checkout yet: ${summary.validationWarnings.join(' ')}`;
     } else {
-      // Step 1: Lock and present summary for review (Human-in-the-Loop Confirmation Gate)
-      const step1: AgentThoughtStep = {
-        stepIndex: 1,
-        thought: 'User requested checkout. Before initiating payment, I MUST present an explicit locked order summary and obtain human confirmation.'
-      };
-      step1.action = { tool: 'present_order_summary_for_review', args: {} };
-      const reviewRes = await dispatchToolCall(sessionId, 'present_order_summary_for_review', {});
-      step1.observation = reviewRes.result;
-      thoughtSteps.push(step1);
+      const risk = evaluateCartRisk(summary);
 
-      const itemsList = summary.items.map(i => `• ${i.quantity}x **${i.productName}** (${i.color ?? ''} ${i.size ?? ''}) — ₹${i.totalPriceInPaise / 100}`).join('\n');
+      if (risk.isBlocked) {
+        assistantReply = `🛑 **Order Safety Limit Reached**\n\n${risk.blockedReason}\n\nPlease adjust your cart items to proceed with conversational checkout.`;
+      } else {
+        // Step 1: Lock and present summary for review (Human-in-the-Loop Confirmation Gate)
+        const step1: AgentThoughtStep = {
+          stepIndex: 1,
+          thought: `User requested checkout. Risk Level: ${risk.riskLevel} (Score: ${risk.riskScore}/100). Presenting locked order review.`
+        };
+        step1.action = { tool: 'present_order_summary_for_review', args: {} };
+        const reviewRes = await dispatchToolCall(sessionId, 'present_order_summary_for_review', {});
+        step1.observation = reviewRes.result;
+        thoughtSteps.push(step1);
 
-      assistantReply = `🔒 **Order Confirmation Review**\n\nPlease verify your order before we proceed to payment:\n\n${itemsList}\n\n**Subtotal:** ₹${summary.pricing.subtotalInRupees.toFixed(2)}\n**GST (5%):** ₹${summary.pricing.taxInRupees.toFixed(2)}\n**Shipping:** ${summary.pricing.shippingFeeInRupees === 0 ? 'FREE' : '₹' + summary.pricing.shippingFeeInRupees}\n${summary.pricing.discountInRupees > 0 ? `**Discount (${summary.pricing.couponCode}):** -₹${summary.pricing.discountInRupees.toFixed(2)}\n` : ''}👉 **Total Payable:** **₹${summary.pricing.totalInRupees.toFixed(2)}**\n\n*Reply with **"Confirm"** or click the confirmation button to launch Razorpay checkout.*`;
+        const itemsList = summary.items.map(i => `• ${i.quantity}x **${i.productName}** (${i.color ?? ''} ${i.size ?? ''}) — ₹${i.totalPriceInPaise / 100}`).join('\n');
+
+        let advisory = '';
+        if (risk.requiresElevatedConfirmation) {
+          advisory = `⚠️ **High-Value Order Advisory (Risk Tier: ELEVATED)**\n*This order is above ₹20,000. Please carefully review all line items below.*\n\n`;
+        }
+
+        assistantReply = `${advisory}🔒 **Order Confirmation Review**\n\nPlease verify your order before we proceed to payment:\n\n${itemsList}\n\n**Subtotal:** ₹${summary.pricing.subtotalInRupees.toFixed(2)}\n**GST (5%):** ₹${summary.pricing.taxInRupees.toFixed(2)}\n**Shipping:** ${summary.pricing.shippingFeeInRupees === 0 ? 'FREE' : '₹' + summary.pricing.shippingFeeInRupees}\n${summary.pricing.discountInRupees > 0 ? `**Discount (${summary.pricing.couponCode}):** -₹${summary.pricing.discountInRupees.toFixed(2)}\n` : ''}👉 **Total Payable:** **₹${summary.pricing.totalInRupees.toFixed(2)}**\n\n*Reply with **"Confirm"** or click the confirmation button to launch Razorpay checkout.*`;
+      }
     }
   }
 
