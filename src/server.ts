@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createOrderFromCart, getOrderById, updateOrderStatus } from './orders/orderManager.js';
 import { runAgentTurn } from './agent/agentLoop.js';
+import { subscribeToAuditStream, getAuditLogsForSession, getAllAuditLogs } from './audit/auditLogger.js';
 import { createRazorpayOrder } from './razorpay/orderService.js';
 import { verifyRazorpaySignature, generateTestSignature } from './razorpay/verifyPayment.js';
 import { verifyWebhookSignature, processWebhookEvent, RazorpayWebhookPayload } from './razorpay/webhookService.js';
@@ -68,6 +69,36 @@ export function createApp() {
       });
     } catch (err) {
       res.status(500).json({ success: false, error: (err as Error).message });
+    }
+  });
+
+  // ==========================================
+  // DAY 6: REAL-TIME AUDIT STREAM (SSE) & LOGS API
+  // ==========================================
+  app.get('/api/audit/stream', (req: Request, res: Response): void => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    // Send initial heartbeat
+    res.write(`data: ${JSON.stringify({ type: 'HEARTBEAT', timestamp: new Date().toISOString() })}\n\n`);
+
+    const unsubscribe = subscribeToAuditStream(entry => {
+      res.write(`data: ${JSON.stringify(entry)}\n\n`);
+    });
+
+    req.on('close', () => {
+      unsubscribe();
+    });
+  });
+
+  app.get('/api/audit/logs', (req: Request, res: Response): void => {
+    const sessionId = req.query.sessionId as string;
+    if (sessionId) {
+      res.json({ success: true, logs: getAuditLogsForSession(sessionId) });
+    } else {
+      res.json({ success: true, logs: getAllAuditLogs() });
     }
   });
 

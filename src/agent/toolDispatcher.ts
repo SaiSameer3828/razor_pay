@@ -12,6 +12,7 @@ import {
   invalidateConfirmationOnCartChange,
   evaluatePaymentGate
 } from './confirmationGate.js';
+import { recordAuditLog } from '../audit/auditLogger.js';
 import { AGENT_TOOLS } from './tools.js';
 import { ToolResult } from './types.js';
 
@@ -53,7 +54,7 @@ function validateToolArguments(toolName: string, args: Record<string, any>): { i
 }
 
 /**
- * Dispatches and executes an agent tool call against pure backend services
+ * Dispatches and executes an agent tool call against pure backend services, recording each action in audit logs
  */
 export async function dispatchToolCall(
   cartId: string,
@@ -61,18 +62,37 @@ export async function dispatchToolCall(
   args: Record<string, any>,
   callId: string = 'call_default'
 ): Promise<ToolResult> {
+  const startTime = Date.now();
+
   // Step 1: Strict JSON Schema Argument Validation
   const validation = validateToolArguments(toolName, args);
   if (!validation.isValid) {
-    return {
+    const result: ToolResult = {
       toolCallId: callId,
       name: toolName,
       isError: true,
       result: { error: validation.error }
     };
+
+    recordAuditLog({
+      sessionId: cartId,
+      turnIndex: 0,
+      type: 'TOOL_EXECUTION',
+      tool: toolName,
+      args,
+      result: result.result,
+      outcome: 'BLOCKED',
+      reason: validation.error,
+      executionTimeMs: Date.now() - startTime
+    });
+
+    return result;
   }
 
   try {
+    let resultPayload: any;
+    let isError = false;
+
     switch (toolName) {
       case 'search_catalog': {
         const query = args.query || '';
@@ -96,118 +116,84 @@ export async function dispatchToolCall(
           }))
         }));
 
-        return {
-          toolCallId: callId,
-          name: toolName,
-          result: {
-            count: simplified.length,
-            products: simplified
-          }
+        resultPayload = {
+          count: simplified.length,
+          products: simplified
         };
+        break;
       }
 
       case 'get_product_details': {
         const product = getProductById(args.product_id);
         if (!product) {
-          return {
-            toolCallId: callId,
-            name: toolName,
-            isError: true,
-            result: { error: `Product with ID "${args.product_id}" not found in catalog.` }
-          };
-        }
-
-        return {
-          toolCallId: callId,
-          name: toolName,
-          result: {
+          isError = true;
+          resultPayload = { error: `Product with ID "${args.product_id}" not found in catalog.` };
+        } else {
+          resultPayload = {
             ...product,
             variants: product.variants.map(v => ({
               ...v,
               priceInRupees: v.priceInPaise / 100
             }))
-          }
-        };
+          };
+        }
+        break;
       }
 
       case 'add_to_cart': {
-        invalidateConfirmationOnCartChange(cartId); // Any cart mutation invalidates previous review
+        invalidateConfirmationOnCartChange(cartId);
         const quantity = args.quantity !== undefined ? Number(args.quantity) : 1;
-        const result = addToCart(cartId, args.product_id, args.variant_id, quantity);
-        return {
-          toolCallId: callId,
-          name: toolName,
-          isError: !result.success,
-          result
-        };
+        const addRes = addToCart(cartId, args.product_id, args.variant_id, quantity);
+        isError = !addRes.success;
+        resultPayload = addRes;
+        break;
       }
 
       case 'update_cart_quantity': {
         invalidateConfirmationOnCartChange(cartId);
         const quantity = Number(args.quantity);
-        const result = updateQuantity(cartId, args.product_id, args.variant_id, quantity);
-        return {
-          toolCallId: callId,
-          name: toolName,
-          isError: !result.success,
-          result
-        };
+        const updateRes = updateQuantity(cartId, args.product_id, args.variant_id, quantity);
+        isError = !updateRes.success;
+        resultPayload = updateRes;
+        break;
       }
 
       case 'remove_from_cart': {
         invalidateConfirmationOnCartChange(cartId);
-        const result = removeFromCart(cartId, args.product_id, args.variant_id);
-        return {
-          toolCallId: callId,
-          name: toolName,
-          isError: !result.success,
-          result
-        };
+        const removeRes = removeFromCart(cartId, args.product_id, args.variant_id);
+        isError = !removeRes.success;
+        resultPayload = removeRes;
+        break;
       }
 
       case 'get_cart_summary': {
-        const summary = getCartSummary(cartId);
-        return {
-          toolCallId: callId,
-          name: toolName,
-          result: summary
-        };
+        resultPayload = getCartSummary(cartId);
+        break;
       }
 
       case 'apply_coupon': {
         invalidateConfirmationOnCartChange(cartId);
-        const result = applyCoupon(cartId, args.coupon_code || '');
-        return {
-          toolCallId: callId,
-          name: toolName,
-          isError: !result.success,
-          result
-        };
+        const couponRes = applyCoupon(cartId, args.coupon_code || '');
+        isError = !couponRes.success;
+        resultPayload = couponRes;
+        break;
       }
 
       case 'present_order_summary_for_review': {
         const summary = getCartSummary(cartId);
         if (summary.items.length === 0) {
-          return {
-            toolCallId: callId,
-            name: toolName,
-            isError: true,
-            result: { error: 'Cannot present order summary: Cart is empty.' }
-          };
-        }
-
-        markOrderPresentedForReview(cartId, summary);
-
-        return {
-          toolCallId: callId,
-          name: toolName,
-          result: {
+          isError = true;
+          resultPayload = { error: 'Cannot present order summary: Cart is empty.' };
+        } else {
+          markOrderPresentedForReview(cartId, summary);
+          resultPayload = {
             success: true,
             message: 'Order summary locked and presented for human review.',
             confirmationState: 'AWAITING_USER_CONFIRMATION',
             cart: summary
-          }
-        };
+          };
+        }
+        break;
       }
 
       case 'initiate_payment': {
@@ -216,19 +202,16 @@ export async function dispatchToolCall(
         // EVALUATE HARD CONFIRMATION GATE
         const gateEvaluation = evaluatePaymentGate(cartId, summary);
         if (!gateEvaluation.allowed) {
-          return {
-            toolCallId: callId,
-            name: toolName,
-            isError: true,
-            result: {
-              success: false,
-              gateLocked: true,
-              error: gateEvaluation.reason
-            }
+          isError = true;
+          resultPayload = {
+            success: false,
+            gateLocked: true,
+            error: gateEvaluation.reason
           };
+          break;
         }
 
-        // Gate Passed: Create Razorpay Order
+        // Gate Passed: Create Razorpay Order using the snapshotted total
         const checkoutResult = await createOrderFromCart(cartId, {
           customerDetails: {
             name: args.customer_name || 'Customer',
@@ -237,28 +220,71 @@ export async function dispatchToolCall(
           }
         });
 
-        return {
-          toolCallId: callId,
-          name: toolName,
-          isError: !checkoutResult.success,
-          result: checkoutResult
-        };
+        isError = !checkoutResult.success;
+        resultPayload = checkoutResult;
+
+        if (checkoutResult.success) {
+          recordAuditLog({
+            sessionId: cartId,
+            turnIndex: 0,
+            type: 'PAYMENT_EVENT',
+            thought: `Razorpay Order #${checkoutResult.razorpayOrder?.id} created for Internal Order #${checkoutResult.order?.id}. Amount locked: ₹${((checkoutResult.order?.totalInPaise || 0) / 100).toFixed(2)}.`,
+            outcome: 'SUCCESS',
+            result: {
+              orderId: checkoutResult.order?.id,
+              razorpayOrderId: checkoutResult.razorpayOrder?.id,
+              amount: checkoutResult.order?.totalInPaise
+            }
+          });
+        }
+        break;
       }
 
       default:
-        return {
-          toolCallId: callId,
-          name: toolName,
-          isError: true,
-          result: { error: `Tool "${toolName}" is not recognized or permitted.` }
-        };
+        isError = true;
+        resultPayload = { error: `Tool "${toolName}" is not recognized or permitted.` };
     }
+
+    const executionTimeMs = Date.now() - startTime;
+
+    recordAuditLog({
+      sessionId: cartId,
+      turnIndex: 0,
+      type: 'TOOL_EXECUTION',
+      tool: toolName,
+      args,
+      result: resultPayload,
+      outcome: isError ? 'FAILED' : 'SUCCESS',
+      reason: isError ? resultPayload?.error || resultPayload?.message : undefined,
+      executionTimeMs
+    });
+
+    return {
+      toolCallId: callId,
+      name: toolName,
+      isError,
+      result: resultPayload
+    };
   } catch (err) {
+    const executionTimeMs = Date.now() - startTime;
+    const errorMsg = (err as Error).message;
+
+    recordAuditLog({
+      sessionId: cartId,
+      turnIndex: 0,
+      type: 'TOOL_EXECUTION',
+      tool: toolName,
+      args,
+      outcome: 'FAILED',
+      reason: errorMsg,
+      executionTimeMs
+    });
+
     return {
       toolCallId: callId,
       name: toolName,
       isError: true,
-      result: { error: `Tool execution failed: ${(err as Error).message}` }
+      result: { error: `Tool execution failed: ${errorMsg}` }
     };
   }
 }

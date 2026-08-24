@@ -10,6 +10,7 @@
     "demo:day3": "tsx src/demo-day3.ts",
     "demo:day4": "tsx src/demo-day4.ts",
     "demo:day5": "tsx src/demo-day5.ts",
+    "demo:day6": "tsx src/demo-day6.ts",
     "start:server": "tsx src/server.ts",
     "build": "tsc"
   },
