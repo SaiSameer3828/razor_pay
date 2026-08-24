@@ -114,6 +114,7 @@ Rules:
   // =========================================================================
   const lowerMsg = userMessage.toLowerCase().trim();
   const gate = getSessionGate(sessionId);
+  let paymentOrderData: any = undefined;
 
   // =========================================================================
   // SCENARIO A: EXPLICIT CONFIRMATION TO PAY ("yes confirm", "proceed with payment", etc.)
@@ -188,7 +189,13 @@ Rules:
     if (paymentRes.result.success) {
       const order = paymentRes.result.order;
       const rzp = paymentRes.result.razorpayOrder;
-      assistantReply = `🎉 **Order #${order.id} Created!**\n\n• **Amount:** ₹${(order.totalInPaise / 100).toFixed(2)}\n• **Razorpay Order ID:** \`${rzp.id}\`\n\nYour payment window is now open. Complete the 2FA/UPI verification to finalize your order!`;
+      paymentOrderData = {
+        orderId: order.id,
+        razorpayOrderId: rzp?.id,
+        amountInRupees: order.totalInPaise / 100,
+        amountInPaise: order.totalInPaise
+      };
+      assistantReply = `🎉 **Order #${order.id} Created!**\n\n• **Amount:** ₹${(order.totalInPaise / 100).toFixed(2)}\n• **Razorpay Order ID:** \`${rzp?.id || 'TEST'}\`\n\nYour payment window is now open. Complete the 2FA/UPI verification to finalize your order!`;
     } else {
       assistantReply = "⚠️ Let's review your order details first before we proceed to payment. Say *'checkout'* to see your locked order review card!";
     }
@@ -446,6 +453,7 @@ Rules:
     userMessage,
     assistantReply,
     thoughtProcess: thoughtSteps,
-    cartSummary: getCartSummary(sessionId)
+    cartSummary: getCartSummary(sessionId),
+    paymentOrder: paymentOrderData
   };
 }

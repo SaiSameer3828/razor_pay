@@ -13,7 +13,7 @@ export class GeminiBrain implements AgentBrain {
   private ai: GoogleGenAI;
   private model: string;
 
-  constructor(apiKey?: string, model: string = 'gemini-2.0-flash') {
+  constructor(apiKey?: string, model: string = 'gemini-1.5-flash') {
     const key = apiKey || process.env.GEMINI_API_KEY || '';
     this.ai = new GoogleGenAI({ apiKey: key });
     this.model = model;

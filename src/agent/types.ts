@@ -47,4 +47,10 @@ export interface AgentResponse {
   assistantReply: string;
   thoughtProcess: AgentThoughtStep[];
   cartSummary: CartSummary;
+  paymentOrder?: {
+    orderId: string;
+    razorpayOrderId?: string;
+    amountInRupees: number;
+    amountInPaise: number;
+  };
 }
