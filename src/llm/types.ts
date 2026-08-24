@@ -18,7 +18,7 @@ export interface LLMCompletionResult {
 }
 
 export interface AgentBrain {
-  provider: 'anthropic' | 'openai' | 'mock';
+  provider: 'gemini' | 'mock';
   generateCompletion(
     messages: LLMMessage[],
     tools: AgentToolDefinition[],

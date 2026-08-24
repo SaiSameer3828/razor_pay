@@ -1,5 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
 import dotenv from 'dotenv';
 import { AgentBrain, LLMMessage, LLMCompletionResult } from './types.js';
 import { AgentToolDefinition } from '../agent/types.js';
@@ -7,15 +6,16 @@ import { AgentToolDefinition } from '../agent/types.js';
 dotenv.config();
 
 /**
- * Anthropic Claude Brain Implementation
+ * Google Gemini Brain Implementation (Powered by Gemini 2.0 Flash / 1.5 Flash)
  */
-export class AnthropicBrain implements AgentBrain {
-  public provider: 'anthropic' = 'anthropic';
-  private client: Anthropic;
+export class GeminiBrain implements AgentBrain {
+  public provider: 'gemini' = 'gemini';
+  private ai: GoogleGenAI;
   private model: string;
 
-  constructor(apiKey?: string, model: string = 'claude-3-5-sonnet-20241022') {
-    this.client = new Anthropic({ apiKey: apiKey || process.env.ANTHROPIC_API_KEY });
+  constructor(apiKey?: string, model: string = 'gemini-2.0-flash') {
+    const key = apiKey || process.env.GEMINI_API_KEY || '';
+    this.ai = new GoogleGenAI({ apiKey: key });
     this.model = model;
   }
 
@@ -24,115 +24,63 @@ export class AnthropicBrain implements AgentBrain {
     tools: AgentToolDefinition[],
     options?: { systemPrompt?: string }
   ): Promise<LLMCompletionResult> {
-    const formattedTools = tools.map(t => ({
-      name: t.name,
-      description: t.description,
-      input_schema: {
-        type: 'object' as const,
-        properties: t.parameters.properties,
-        required: t.parameters.required || []
-      }
-    }));
-
-    const anthropicMessages = messages
-      .filter(m => m.role !== 'system')
-      .map(m => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content
-      }));
-
-    const response = await this.client.messages.create({
-      model: this.model,
-      max_tokens: 1024,
-      system: options?.systemPrompt || 'You are an AI Shopping Assistant with strict catalog grounding and financial safety guardrails.',
-      messages: anthropicMessages,
-      tools: formattedTools
-    });
-
-    let textContent = '';
-    const toolCalls: any[] = [];
-
-    for (const block of response.content) {
-      if (block.type === 'text') {
-        textContent += block.text;
-      } else if (block.type === 'tool_use') {
-        toolCalls.push({
-          id: block.id,
-          name: block.name,
-          arguments: block.input as Record<string, any>
-        });
-      }
-    }
-
-    return {
-      text: textContent || undefined,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined
-    };
-  }
-}
-
-/**
- * OpenAI Brain Implementation
- */
-export class OpenAIBrain implements AgentBrain {
-  public provider: 'openai' = 'openai';
-  private client: OpenAI;
-  private model: string;
-
-  constructor(apiKey?: string, model: string = 'gpt-4o') {
-    this.client = new OpenAI({ apiKey: apiKey || process.env.OPENAI_API_KEY });
-    this.model = model;
-  }
-
-  async generateCompletion(
-    messages: LLMMessage[],
-    tools: AgentToolDefinition[],
-    options?: { systemPrompt?: string }
-  ): Promise<LLMCompletionResult> {
-    const formattedTools = tools.map(t => ({
-      type: 'function' as const,
-      function: {
+    try {
+      // Format tools for Gemini functionDeclarations
+      const functionDeclarations = tools.map(t => ({
         name: t.name,
         description: t.description,
         parameters: {
-          type: 'object',
+          type: 'OBJECT' as const,
           properties: t.parameters.properties,
           required: t.parameters.required || []
         }
+      }));
+
+      // Format messages into Gemini contents structure
+      const contents = messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }]
+        }));
+
+      const response = await this.ai.models.generateContent({
+        model: this.model,
+        contents: contents as any,
+        config: {
+          systemInstruction: options?.systemPrompt || 'You are an AI Shopping Assistant connected to a Razorpay checkout backend.',
+          tools: [{ functionDeclarations: functionDeclarations as any }]
+        }
+      });
+
+      const functionCalls = response.functionCalls;
+      const toolCalls: any[] = [];
+
+      if (functionCalls && functionCalls.length > 0) {
+        for (const fc of functionCalls) {
+          toolCalls.push({
+            id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            name: fc.name,
+            arguments: fc.args || {}
+          });
+        }
       }
-    }));
 
-    const openAiMessages = messages.map(m => ({
-      role: m.role,
-      content: m.content
-    }));
-
-    if (options?.systemPrompt && !openAiMessages.some(m => m.role === 'system')) {
-      openAiMessages.unshift({ role: 'system', content: options.systemPrompt });
+      return {
+        text: response.text || undefined,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined
+      };
+    } catch (err: any) {
+      console.warn(`[GEMINI API NOTICE] ${err.message}. Falling back to deterministic ReAct reasoning.`);
+      // Graceful fallback if rate-limited or key invalid
+      const fallbackBrain = new MockBrain();
+      return fallbackBrain.generateCompletion(messages, tools, options);
     }
-
-    const response = await this.client.chat.completions.create({
-      model: this.model,
-      messages: openAiMessages as any,
-      tools: formattedTools.length > 0 ? formattedTools : undefined
-    });
-
-    const choice = response.choices[0]?.message;
-    const toolCalls = choice?.tool_calls?.map(tc => ({
-      id: tc.id,
-      name: tc.function.name,
-      arguments: JSON.parse(tc.function.arguments || '{}')
-    }));
-
-    return {
-      text: choice?.content || undefined,
-      toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined
-    };
   }
 }
 
 /**
- * Mock Brain (Deterministic conversational ReAct model for offline test suites)
+ * Deterministic Mock Brain (Used for offline CI/CD test suites & instant zero-cost demo)
  */
 export class MockBrain implements AgentBrain {
   public provider: 'mock' = 'mock';
@@ -199,10 +147,9 @@ let activeBrain: AgentBrain | null = null;
 export function getAgentBrain(): AgentBrain {
   if (activeBrain) return activeBrain;
 
-  if (process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_API_KEY !== 'placeholder_key') {
-    activeBrain = new AnthropicBrain();
-  } else if (process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'placeholder_key') {
-    activeBrain = new OpenAIBrain();
+  // In test environments (Vitest), always use MockBrain for fast, deterministic, offline execution
+  if (process.env.NODE_ENV !== 'test' && process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim() !== '') {
+    activeBrain = new GeminiBrain();
   } else {
     activeBrain = new MockBrain();
   }

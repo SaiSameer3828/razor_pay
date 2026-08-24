@@ -6,7 +6,11 @@ dotenv.config();
 export const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_mock_key';
 export const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'mock_secret_for_local_testing';
 
-export const isUsingMockKeys = RAZORPAY_KEY_ID === 'rzp_test_mock_key' || !process.env.RAZORPAY_KEY_ID;
+export const isUsingMockKeys =
+  RAZORPAY_KEY_ID === 'rzp_test_mock_key' ||
+  RAZORPAY_KEY_ID === 'rzp_test_placeholder_key' ||
+  !process.env.RAZORPAY_KEY_ID ||
+  process.env.NODE_ENV === 'test';
 
 let razorpayInstance: Razorpay | null = null;
 
