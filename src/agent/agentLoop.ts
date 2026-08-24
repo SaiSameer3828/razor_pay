@@ -1,8 +1,10 @@
-import { SAFE_TOOLS } from './tools.js';
 import { dispatchToolCall } from './toolDispatcher.js';
-import { AgentResponse, AgentThoughtStep, ToolCall } from './types.js';
+import { AgentResponse, AgentThoughtStep } from './types.js';
 import { getCartSummary } from '../cart/cartManager.js';
-import { searchProducts, CATALOG } from '../catalog/products.js';
+import {
+  getSessionGate,
+  recordExplicitHumanConfirmation
+} from './confirmationGate.js';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
@@ -16,6 +18,7 @@ interface SessionContext {
 }
 
 const sessionStore = new Map<string, SessionContext>();
+const MAX_REACT_STEPS = 5; // Hard cap on tool reasoning iterations per turn
 
 export function getOrCreateSession(sessionId: string): SessionContext {
   let session = sessionStore.get(sessionId);
@@ -35,8 +38,7 @@ export function resetAgentSessions(): void {
 }
 
 /**
- * ReAct Agent Orchestrator:
- * Executes the Thought -> Action -> Observation loop driven by natural language.
+ * ReAct Agent Orchestrator with Hard Cap and Human-in-the-Loop Confirmation Gate
  */
 export async function runAgentTurn(sessionId: string, userMessage: string): Promise<AgentResponse> {
   const session = getOrCreateSession(sessionId);
@@ -47,21 +49,87 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
   let assistantReply = '';
 
   const lowerMsg = userMessage.toLowerCase().trim();
+  const gate = getSessionGate(sessionId);
 
   // =========================================================================
-  // Deterministic ReAct Strategy Engine (Fast, testable, anti-hallucinatory)
+  // SCENARIO A: EXPLICIT CONFIRMATION TO PAY ("yes confirm", "proceed with payment", etc.)
   // =========================================================================
+  const isExplicitConfirmation =
+    lowerMsg === 'yes' ||
+    lowerMsg === 'confirm' ||
+    lowerMsg === 'confirm and pay' ||
+    lowerMsg === 'yes confirm' ||
+    lowerMsg === 'proceed' ||
+    lowerMsg === 'proceed to payment' ||
+    lowerMsg.includes('yes, confirm') ||
+    lowerMsg.includes('confirm order');
 
-  // SCENARIO 1: View / Show Cart Summary
-  if (lowerMsg.includes('cart') && (lowerMsg.includes('show') || lowerMsg.includes('view') || lowerMsg.includes('what is in') || lowerMsg.includes('summary') || lowerMsg === 'cart')) {
+  if (isExplicitConfirmation && gate.state === 'REVIEWING_ORDER') {
+    // Record human confirmation
+    recordExplicitHumanConfirmation(sessionId);
+
     const step1: AgentThoughtStep = {
       stepIndex: 1,
-      thought: 'User is asking to review their current shopping cart. Let me call get_cart_summary to retrieve all line items, tax, and total.'
+      thought: 'User has explicitly confirmed the locked order summary. Gate is unlocked. Calling initiate_payment to create the Razorpay order.'
     };
+    step1.action = { tool: 'initiate_payment', args: { customer_name: 'Customer' } };
 
-    const action = { tool: 'get_cart_summary', args: {} };
-    step1.action = action;
-    const observation = dispatchToolCall(sessionId, 'get_cart_summary', {});
+    const paymentRes = await dispatchToolCall(sessionId, 'initiate_payment', { customer_name: 'Customer' });
+    step1.observation = paymentRes.result;
+    thoughtSteps.push(step1);
+
+    if (paymentRes.result.success) {
+      const order = paymentRes.result.order;
+      const rzp = paymentRes.result.razorpayOrder;
+      assistantReply = `🎉 **Order #${order.id} Created!**\n\n• **Amount:** ₹${(order.totalInPaise / 100).toFixed(2)}\n• **Razorpay Order ID:** \`${rzp.id}\`\n\nYour payment window is now open. Complete the 2FA/UPI verification to finalize your order!`;
+    } else {
+      assistantReply = `⚠️ Payment initiation blocked: ${paymentRes.result.error}`;
+    }
+  }
+
+  // =========================================================================
+  // SCENARIO B: REQUEST CHECKOUT / INITIATE PAYMENT FLOW
+  // =========================================================================
+  else if (
+    lowerMsg.includes('checkout') ||
+    lowerMsg.includes('pay now') ||
+    lowerMsg.includes('buy now') ||
+    lowerMsg.includes('initiate payment') ||
+    lowerMsg.includes('place order')
+  ) {
+    const summary = getCartSummary(sessionId);
+
+    if (summary.items.length === 0) {
+      assistantReply = "Your cart is empty. Add some items before proceeding to checkout.";
+    } else if (!summary.isReadyForCheckout) {
+      assistantReply = `⚠️ Cannot checkout yet: ${summary.validationWarnings.join(' ')}`;
+    } else {
+      // Step 1: Lock and present summary for review (Human-in-the-Loop Confirmation Gate)
+      const step1: AgentThoughtStep = {
+        stepIndex: 1,
+        thought: 'User requested checkout. Before initiating payment, I MUST present an explicit locked order summary and obtain human confirmation.'
+      };
+      step1.action = { tool: 'present_order_summary_for_review', args: {} };
+      const reviewRes = await dispatchToolCall(sessionId, 'present_order_summary_for_review', {});
+      step1.observation = reviewRes.result;
+      thoughtSteps.push(step1);
+
+      const itemsList = summary.items.map(i => `• ${i.quantity}x **${i.productName}** (${i.color ?? ''} ${i.size ?? ''}) — ₹${i.totalPriceInPaise / 100}`).join('\n');
+
+      assistantReply = `🔒 **Order Confirmation Review**\n\nPlease verify your order before we proceed to payment:\n\n${itemsList}\n\n**Subtotal:** ₹${summary.pricing.subtotalInRupees.toFixed(2)}\n**GST (5%):** ₹${summary.pricing.taxInRupees.toFixed(2)}\n**Shipping:** ${summary.pricing.shippingFeeInRupees === 0 ? 'FREE' : '₹' + summary.pricing.shippingFeeInRupees}\n${summary.pricing.discountInRupees > 0 ? `**Discount (${summary.pricing.couponCode}):** -₹${summary.pricing.discountInRupees.toFixed(2)}\n` : ''}👉 **Total Payable:** **₹${summary.pricing.totalInRupees.toFixed(2)}**\n\n*Reply with **"Confirm"** or click the confirmation button to launch Razorpay checkout.*`;
+    }
+  }
+
+  // =========================================================================
+  // SCENARIO C: VIEW CART SUMMARY
+  // =========================================================================
+  else if (lowerMsg.includes('cart') && (lowerMsg.includes('show') || lowerMsg.includes('view') || lowerMsg.includes('what is in') || lowerMsg.includes('summary') || lowerMsg === 'cart')) {
+    const step1: AgentThoughtStep = {
+      stepIndex: 1,
+      thought: 'User is asking to review their current shopping cart. Calling get_cart_summary.'
+    };
+    step1.action = { tool: 'get_cart_summary', args: {} };
+    const observation = await dispatchToolCall(sessionId, 'get_cart_summary', {});
     step1.observation = observation.result;
     thoughtSteps.push(step1);
 
@@ -74,19 +142,18 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
     }
   }
 
-  // SCENARIO 2: Add item to cart ("add two of the blue one", "add shirt size L", etc.)
+  // =========================================================================
+  // SCENARIO D: ADD ITEM TO CART
+  // =========================================================================
   else if (lowerMsg.includes('add') || lowerMsg.includes('buy') || lowerMsg.includes('put in cart')) {
-    // Step 1: Detect query keywords & size/color constraints
     let searchKeyword = '';
     let targetSize = '';
     let targetColor = '';
     let quantity = 1;
 
-    // Detect quantity (e.g., "two", "2", "3", "three")
     if (lowerMsg.includes('two') || lowerMsg.includes(' 2 ') || lowerMsg.startsWith('2 ') || lowerMsg.endsWith(' 2')) quantity = 2;
     if (lowerMsg.includes('three') || lowerMsg.includes(' 3 ')) quantity = 3;
 
-    // Detect color
     if (lowerMsg.includes('blue')) targetColor = 'blue';
     else if (lowerMsg.includes('white')) targetColor = 'white';
     else if (lowerMsg.includes('black')) targetColor = 'black';
@@ -94,7 +161,6 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
     else if (lowerMsg.includes('burgundy')) targetColor = 'burgundy';
     else if (lowerMsg.includes('tan') || lowerMsg.includes('cognac')) targetColor = 'tan';
 
-    // Detect size
     if (lowerMsg.includes('size l') || lowerMsg.includes('in l') || lowerMsg.includes('large')) targetSize = 'L';
     else if (lowerMsg.includes('size m') || lowerMsg.includes('in m') || lowerMsg.includes('medium')) targetSize = 'M';
     else if (lowerMsg.includes('size s') || lowerMsg.includes('in s') || lowerMsg.includes('small')) targetSize = 'S';
@@ -103,7 +169,6 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
     else if (lowerMsg.includes('uk 8') || lowerMsg.includes('size 8')) targetSize = 'UK 8';
     else if (lowerMsg.includes('uk 9') || lowerMsg.includes('size 9')) targetSize = 'UK 9';
 
-    // Detect product type
     if (lowerMsg.includes('shirt')) searchKeyword = 'shirt';
     else if (lowerMsg.includes('blazer') || lowerMsg.includes('suit')) searchKeyword = 'blazer';
     else if (lowerMsg.includes('tie')) searchKeyword = 'tie';
@@ -116,49 +181,37 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
     else if (lowerMsg.includes('sweater')) searchKeyword = 'sweater';
     else if (targetColor) searchKeyword = targetColor;
 
-    // Action 1: Search Catalog
     const step1: AgentThoughtStep = {
       stepIndex: 1,
-      thought: `User wants to add item(s) to cart with intent: "${searchKeyword || 'product'}", color: "${targetColor || 'any'}", size: "${targetSize || 'any'}", quantity: ${quantity}. Let me search the store catalog to find the exact matching product and in-stock variant.`
+      thought: `Searching catalog for item matching: "${searchKeyword || 'product'}", color: "${targetColor || 'any'}", size: "${targetSize || 'any'}".`
     };
     step1.action = { tool: 'search_catalog', args: { query: searchKeyword || 'shirt' } };
-    const searchRes = dispatchToolCall(sessionId, 'search_catalog', { query: searchKeyword || 'shirt' });
+    const searchRes = await dispatchToolCall(sessionId, 'search_catalog', { query: searchKeyword || 'shirt' });
     step1.observation = searchRes.result;
     thoughtSteps.push(step1);
 
     const foundProducts = searchRes.result.products || [];
     if (foundProducts.length === 0) {
-      assistantReply = `I searched our catalog for "${searchKeyword || userMessage}", but couldn't find any matching items in stock. Would you like to check our shirts, blazers, chinos, or footwear instead?`;
+      assistantReply = `I searched our catalog for "${searchKeyword || userMessage}", but couldn't find any matching items in stock.`;
     } else {
       const selectedProduct = foundProducts[0];
-      // Find matching variant
       let selectedVariant = selectedProduct.variants.find((v: any) => {
         const matchesColor = !targetColor || (v.color && v.color.toLowerCase().includes(targetColor));
         const matchesSize = !targetSize || (v.size && v.size.toLowerCase().includes(targetSize.toLowerCase()));
         return matchesColor && matchesSize;
-      });
-
-      if (!selectedVariant && selectedProduct.variants.length > 0) {
-        // Fallback to first variant if size/color was not specified
-        selectedVariant = selectedProduct.variants[0];
-      }
+      }) || selectedProduct.variants[0];
 
       if (selectedVariant) {
-        // Action 2: Add to cart
         const step2: AgentThoughtStep = {
           stepIndex: 2,
-          thought: `Found "${selectedProduct.name}" variant "${selectedVariant.sku}" (${selectedVariant.color ?? ''} ${selectedVariant.size ?? ''}) at ₹${selectedVariant.priceInRupees}. Calling add_to_cart for ${quantity} unit(s).`
+          thought: `Adding ${quantity}x "${selectedProduct.name}" (${selectedVariant.color ?? ''} ${selectedVariant.size ?? ''}) to cart.`
         };
         step2.action = {
           tool: 'add_to_cart',
-          args: {
-            product_id: selectedProduct.id,
-            variant_id: selectedVariant.id,
-            quantity
-          }
+          args: { product_id: selectedProduct.id, variant_id: selectedVariant.id, quantity }
         };
 
-        const addRes = dispatchToolCall(sessionId, 'add_to_cart', {
+        const addRes = await dispatchToolCall(sessionId, 'add_to_cart', {
           product_id: selectedProduct.id,
           variant_id: selectedVariant.id,
           quantity
@@ -168,7 +221,7 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
 
         if (addRes.result.success) {
           const currentSummary = getCartSummary(sessionId);
-          assistantReply = `Added **${quantity}x ${selectedProduct.name}** (${selectedVariant.color ?? ''} ${selectedVariant.size ?? ''}) to your cart! 🛍️\n\nYour cart now has **${currentSummary.totalQuantity} items** with a total of **₹${currentSummary.pricing.totalInRupees.toFixed(2)}** (includes 5% GST & free shipping). Would you like to add anything else or review the cart?`;
+          assistantReply = `Added **${quantity}x ${selectedProduct.name}** (${selectedVariant.color ?? ''} ${selectedVariant.size ?? ''}) to your cart! 🛍️\n\nYour cart total is **₹${currentSummary.pricing.totalInRupees.toFixed(2)}** (${currentSummary.totalQuantity} items). Ready to checkout?`;
         } else {
           assistantReply = `⚠️ I couldn't add that item: ${addRes.result.message}`;
         }
@@ -176,29 +229,30 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
     }
   }
 
-  // SCENARIO 3: Remove item from cart
+  // =========================================================================
+  // SCENARIO E: REMOVE ITEM FROM CART
+  // =========================================================================
   else if (lowerMsg.includes('remove') || lowerMsg.includes('delete')) {
     const summary = getCartSummary(sessionId);
     if (summary.items.length === 0) {
       assistantReply = "Your cart is already empty.";
     } else {
-      // Find item to remove
       const itemToRemove = summary.items.find(i =>
         lowerMsg.includes(i.productName.toLowerCase()) ||
         lowerMsg.includes((i.color || '').toLowerCase()) ||
         lowerMsg.includes((i.size || '').toLowerCase())
-      ) || summary.items[0]; // default remove first if unspecified
+      ) || summary.items[0];
 
       const step1: AgentThoughtStep = {
         stepIndex: 1,
-        thought: `User requested to remove "${itemToRemove.productName}" from their cart. Calling remove_from_cart.`
+        thought: `User requested to remove "${itemToRemove.productName}" from cart.`
       };
       step1.action = {
         tool: 'remove_from_cart',
         args: { product_id: itemToRemove.productId, variant_id: itemToRemove.variantId }
       };
 
-      const removeRes = dispatchToolCall(sessionId, 'remove_from_cart', {
+      const removeRes = await dispatchToolCall(sessionId, 'remove_from_cart', {
         product_id: itemToRemove.productId,
         variant_id: itemToRemove.variantId
       });
@@ -210,45 +264,54 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
     }
   }
 
-  // SCENARIO 4: Apply Coupon
+  // =========================================================================
+  // SCENARIO F: APPLY COUPON
+  // =========================================================================
   else if (lowerMsg.includes('coupon') || lowerMsg.includes('discount') || lowerMsg.includes('welcome10') || lowerMsg.includes('flat500')) {
     const couponCode = lowerMsg.includes('flat500') ? 'FLAT500' : 'WELCOME10';
 
     const step1: AgentThoughtStep = {
       stepIndex: 1,
-      thought: `User wants to apply discount code "${couponCode}". Calling apply_coupon tool.`
+      thought: `Applying coupon "${couponCode}".`
     };
     step1.action = { tool: 'apply_coupon', args: { coupon_code: couponCode } };
-    const couponRes = dispatchToolCall(sessionId, 'apply_coupon', { coupon_code: couponCode });
+    const couponRes = await dispatchToolCall(sessionId, 'apply_coupon', { coupon_code: couponCode });
     step1.observation = couponRes.result;
     thoughtSteps.push(step1);
 
     if (couponRes.result.success) {
       const summary = getCartSummary(sessionId);
-      assistantReply = `🎉 Coupon **${couponCode}** applied successfully! You saved **₹${summary.pricing.discountInRupees.toFixed(2)}**. New total payable: **₹${summary.pricing.totalInRupees.toFixed(2)}**.`;
+      assistantReply = `🎉 Coupon **${couponCode}** applied! You saved **₹${summary.pricing.discountInRupees.toFixed(2)}**. New total: **₹${summary.pricing.totalInRupees.toFixed(2)}**.`;
     } else {
       assistantReply = `⚠️ Could not apply coupon: ${couponRes.result.message}`;
     }
   }
 
-  // SCENARIO 5: Catalog Search / Browse
+  // =========================================================================
+  // SCENARIO G: CATALOG SEARCH / RECOMMENDATIONS
+  // =========================================================================
   else {
     const step1: AgentThoughtStep = {
       stepIndex: 1,
-      thought: `User is asking about products or recommendations ("${userMessage}"). Searching catalog to find relevant in-stock recommendations.`
+      thought: `Searching catalog for recommendations matching "${userMessage}".`
     };
     step1.action = { tool: 'search_catalog', args: { query: userMessage } };
-    const searchRes = dispatchToolCall(sessionId, 'search_catalog', { query: userMessage });
+    const searchRes = await dispatchToolCall(sessionId, 'search_catalog', { query: userMessage });
     step1.observation = searchRes.result;
     thoughtSteps.push(step1);
 
     const items = searchRes.result.products?.slice(0, 3) || [];
     if (items.length > 0) {
-      const suggestions = items.map((p: any) => `• **${p.name}** by *${p.brand}* (₹${p.variants[0]?.priceInRupees || ''}) — ${p.variants.map((v: any) => v.color).filter(Boolean).slice(0, 2).join(', ')}`).join('\n');
-      assistantReply = `Here are some great options matching your request:\n\n${suggestions}\n\nJust say something like *"add the blue one in size L"* and I'll prepare it for you!`;
+      const suggestions = items.map((p: any) => `• **${p.name}** by *${p.brand}* (₹${p.variants[0]?.priceInRupees || ''})`).join('\n');
+      assistantReply = `Here are options matching your search:\n\n${suggestions}\n\nSay *"add the blue one in size L"* or *"checkout"* whenever you're ready!`;
     } else {
-      assistantReply = "Hello! I am your AI Shopping Assistant. You can tell me what you're looking for in plain language, such as:\n\n• *\"Show me linen blazers for a wedding\"*\n• *\"Add two Oxford shirts in blue size L\"*\n• *\"What is in my cart?\"*\n• *\"Apply coupon WELCOME10\"*";
+      assistantReply = "I am your AI Shopping Assistant. Tell me what you'd like to find (e.g. *'show me linen blazers'*, *'add 2 blue shirts'*, or *'checkout'*).";
     }
+  }
+
+  // Enforce Max ReAct Steps Cap
+  if (thoughtSteps.length > MAX_REACT_STEPS) {
+    thoughtSteps.splice(MAX_REACT_STEPS);
   }
 
   session.history.push({ role: 'assistant', content: assistantReply });

@@ -38,15 +38,15 @@ describe('Day 4 Checkpoint: Tool Schema & ReAct Agent Loop Skeleton', () => {
   describe('2. Tool Dispatcher Execution', () => {
     const TEST_CART = 'dispatcher_cart_test';
 
-    it('dispatches search_catalog tool and returns formatted items', () => {
-      const result = dispatchToolCall(TEST_CART, 'search_catalog', { query: 'blazer' });
+    it('dispatches search_catalog tool and returns formatted items', async () => {
+      const result = await dispatchToolCall(TEST_CART, 'search_catalog', { query: 'blazer' });
       expect(result.isError).toBeFalsy();
       expect(result.result.count).toBeGreaterThan(0);
       expect(result.result.products[0].name).toContain('Blazer');
     });
 
-    it('dispatches add_to_cart tool and modifies cart state', () => {
-      const result = dispatchToolCall(TEST_CART, 'add_to_cart', {
+    it('dispatches add_to_cart tool and modifies cart state', async () => {
+      const result = await dispatchToolCall(TEST_CART, 'add_to_cart', {
         product_id: 'prod_oxford_shirt',
         variant_id: 'var_ox_blu_l',
         quantity: 2
@@ -57,10 +57,10 @@ describe('Day 4 Checkpoint: Tool Schema & ReAct Agent Loop Skeleton', () => {
       expect(result.result.cart.totalQuantity).toBe(2);
     });
 
-    it('rejects unknown tool calls gracefully', () => {
-      const result = dispatchToolCall(TEST_CART, 'unauthorized_hack_tool', {});
+    it('rejects unknown tool calls gracefully', async () => {
+      const result = await dispatchToolCall(TEST_CART, 'unauthorized_hack_tool', {});
       expect(result.isError).toBe(true);
-      expect(result.result.error).toContain('not recognized');
+      expect(result.result.error).toContain('not registered');
     });
   });
 

@@ -1,6 +1,6 @@
 import { AgentToolDefinition } from './types.js';
 
-export const SAFE_TOOLS: AgentToolDefinition[] = [
+export const AGENT_TOOLS: AgentToolDefinition[] = [
   {
     name: 'search_catalog',
     description: 'Searches the store catalog by natural language keywords, category, color, material, or maximum budget in Rupees.',
@@ -121,5 +121,41 @@ export const SAFE_TOOLS: AgentToolDefinition[] = [
       },
       required: ['coupon_code']
     }
+  },
+  {
+    name: 'present_order_summary_for_review',
+    description: 'Presents an explicit, locked order review card showing exact items, taxes, shipping, discounts, and final total for human verification before payment can be authorized.',
+    parameters: {
+      type: 'object',
+      properties: {
+        customer_notes: {
+          type: 'string',
+          description: 'Optional customer instructions or notes for the order.'
+        }
+      }
+    }
+  },
+  {
+    name: 'initiate_payment',
+    description: 'Gated payment tool that generates a Razorpay Order ID and returns client checkout tokens. Strictly fails if explicit human confirmation was not recorded in the prior step.',
+    parameters: {
+      type: 'object',
+      properties: {
+        customer_name: {
+          type: 'string',
+          description: 'Customer name for billing receipt.'
+        },
+        customer_email: {
+          type: 'string',
+          description: 'Customer email address for invoice and payment receipt.'
+        },
+        customer_phone: {
+          type: 'string',
+          description: 'Customer phone number.'
+        }
+      }
+    }
   }
 ];
+
+export const SAFE_TOOLS = AGENT_TOOLS.filter(t => t.name !== 'initiate_payment');

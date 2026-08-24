@@ -428,6 +428,18 @@
       textDiv.innerHTML = text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
       msgDiv.appendChild(textDiv);
 
+      // If the message is an Order Confirmation Review, inject interactive confirmation button
+      if (text.includes('Order Confirmation Review')) {
+        const btnContainer = document.createElement('div');
+        btnContainer.style.marginTop = '12px';
+        btnContainer.innerHTML = `
+          <button class="action-btn" style="background: #10b981; padding: 10px 16px; border-radius: 8px; font-weight: 700;" onclick="sendQuickPrompt('yes confirm')">
+            🔒 Confirm & Launch Razorpay Checkout
+          </button>
+        `;
+        msgDiv.appendChild(btnContainer);
+      }
+
       chatMessages.appendChild(msgDiv);
       chatMessages.scrollTop = chatMessages.scrollHeight;
     }
