@@ -175,9 +175,14 @@ describe('Day 1 Checkpoint: Catalog & Pure Cart Engine', () => {
       expect(p.discountInPaise).toBe(50000);
       expect(p.discountInRupees).toBe(500);
 
-      // Total = 549900 (subtotal) + 27495 (tax) + 0 (shipping) - 50000 (discount) = 527395 paise
-      expect(p.totalInPaise).toBe(527395);
-      expect(p.totalInRupees).toBe(5273.95);
+      // Taxable = 549900 - 50000 = 499900 paise
+      // GST 5% on 499900 = 24995 paise = ₹249.95
+      expect(p.taxInPaise).toBe(24995);
+      expect(p.taxInRupees).toBe(249.95);
+
+      // Total = 499900 (taxable) + 24995 (tax) + 0 (shipping) = 524895 paise (₹5,248.95)
+      expect(p.totalInPaise).toBe(524895);
+      expect(p.totalInRupees).toBe(5248.95);
     });
 
     it('rejects coupon if minimum order value is not met', () => {

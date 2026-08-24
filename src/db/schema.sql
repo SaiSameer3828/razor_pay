@@ -1,6 +1,5 @@
 -- ==========================================================
--- 🛒 E-COMMERCE & CONVERSATIONAL CHECKOUT RELATIONAL SCHEMA
--- Compatible with PostgreSQL & SQLite
+-- 🛒 POSTGRESQL SCHEMA: E-COMMERCE & CONVERSATIONAL CHECKOUT
 -- ==========================================================
 
 -- 1. PRODUCTS TABLE
@@ -12,12 +11,12 @@ CREATE TABLE IF NOT EXISTS products (
     category VARCHAR(64) NOT NULL,
     gender VARCHAR(32),
     brand VARCHAR(128) NOT NULL,
-    tags TEXT NOT NULL, -- JSON array or comma-separated string
+    tags JSONB NOT NULL DEFAULT '[]'::jsonb,
     featured_image TEXT NOT NULL,
-    rating DECIMAL(3, 2) DEFAULT 0.0,
+    rating NUMERIC(3, 2) DEFAULT 0.0,
     review_count INTEGER DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 2. PRODUCT VARIANTS TABLE
@@ -31,8 +30,8 @@ CREATE TABLE IF NOT EXISTS product_variants (
     price_in_paise INTEGER NOT NULL,
     original_price_in_paise INTEGER,
     stock INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 3. USER SESSIONS / CARTS TABLE
@@ -41,8 +40,8 @@ CREATE TABLE IF NOT EXISTS carts (
     user_id VARCHAR(64),
     coupon_code VARCHAR(64),
     status VARCHAR(32) DEFAULT 'active', -- 'active', 'locked_for_checkout', 'converted_to_order', 'abandoned'
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 4. CART ITEMS TABLE
@@ -53,8 +52,8 @@ CREATE TABLE IF NOT EXISTS cart_items (
     variant_id VARCHAR(64) NOT NULL REFERENCES product_variants(id),
     quantity INTEGER NOT NULL CHECK (quantity > 0),
     unit_price_in_paise INTEGER NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(cart_id, variant_id)
 );
 
@@ -73,10 +72,10 @@ CREATE TABLE IF NOT EXISTS orders (
     discount_in_paise INTEGER DEFAULT 0,
     total_in_paise INTEGER NOT NULL,
     currency VARCHAR(10) DEFAULT 'INR',
-    items_snapshot TEXT NOT NULL, -- JSON snapshot of purchased items
+    items_snapshot JSONB NOT NULL DEFAULT '[]'::jsonb,
     error_reason TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 6. AGENT AUDIT & REASONING LOGS TABLE (Day 6 checkpoint)
@@ -87,11 +86,11 @@ CREATE TABLE IF NOT EXISTS agent_audit_logs (
     user_input TEXT,
     agent_reasoning TEXT,
     tool_called VARCHAR(64),
-    tool_args TEXT,
-    tool_result TEXT,
-    state_before TEXT,
-    state_after TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    tool_args JSONB,
+    tool_result JSONB,
+    state_before JSONB,
+    state_after JSONB,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Indexes for lightning fast queries

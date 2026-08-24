@@ -93,14 +93,7 @@ export function calculatePricing(rawItems: RawCartItem[], couponCode?: string): 
     });
   }
 
-  // 1. GST (Apparel/Lifestyle rate standard: 5%)
-  const GST_RATE_PERCENT = 5;
-  const taxInPaise = Math.round((subtotalInPaise * GST_RATE_PERCENT) / 100);
-
-  // 2. Shipping: Free on orders >= ₹2,000 (200,000 paise), else ₹99 (9,900 paise)
-  const shippingFeeInPaise = subtotalInPaise === 0 ? 0 : (subtotalInPaise >= 200000 ? 0 : 9900);
-
-  // 3. Discount calculation
+  // 1. Discount calculation (applied before tax on taxable value)
   let discountInPaise = 0;
   let appliedCoupon: string | undefined = undefined;
 
@@ -123,8 +116,16 @@ export function calculatePricing(rawItems: RawCartItem[], couponCode?: string): 
     warnings.push(`Coupon "${couponCode}" is invalid or expired.`);
   }
 
+  // 2. Taxable amount & GST (Standard 5% on discounted amount)
+  const taxableAmountInPaise = Math.max(0, subtotalInPaise - discountInPaise);
+  const GST_RATE_PERCENT = 5;
+  const taxInPaise = Math.round((taxableAmountInPaise * GST_RATE_PERCENT) / 100);
+
+  // 3. Shipping: Free on orders >= ₹2,000 (subtotal), else ₹99
+  const shippingFeeInPaise = subtotalInPaise === 0 ? 0 : (subtotalInPaise >= 200000 ? 0 : 9900);
+
   // 4. Final Total (in paise)
-  const totalInPaise = Math.max(0, subtotalInPaise + taxInPaise + shippingFeeInPaise - discountInPaise);
+  const totalInPaise = taxableAmountInPaise + taxInPaise + shippingFeeInPaise;
 
   const pricing: PricingBreakdown = {
     subtotalInPaise,
