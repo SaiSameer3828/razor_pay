@@ -613,11 +613,31 @@
         const btnContainer = document.createElement('div');
         btnContainer.style.marginTop = '10px';
         btnContainer.innerHTML = `
-          <button class="send-btn" style="background: #10b981; padding: 8px 14px; font-weight: 700; width: 100%;" onclick="sendQuickPrompt('yes confirm')">
+          <button class="send-btn" style="background: #10b981; padding: 10px 16px; font-weight: 700; width: 100%;" onclick="sendQuickPrompt('yes confirm')">
             🔒 Confirm & Launch Razorpay Checkout
           </button>
         `;
         msgDiv.appendChild(btnContainer);
+      }
+
+      // If message is an Order Created response, inject direct Razorpay Checkout Launch button
+      if (text.includes('Order #') && text.includes('Created!')) {
+        const matchOrderId = text.match(/Order #(ord_[a-zA-Z0-9_]+)/);
+        const matchRzpId = text.match(/`([a-zA-Z0-9_]+)`/);
+        const matchAmount = text.match(/₹([0-9.]+)/);
+
+        const orderId = matchOrderId ? matchOrderId[1] : '';
+        const rzpOrderId = matchRzpId ? matchRzpId[1] : '';
+        const amount = matchAmount ? parseFloat(matchAmount[1]) : 0;
+
+        const payBtnContainer = document.createElement('div');
+        payBtnContainer.style.marginTop = '12px';
+        payBtnContainer.innerHTML = `
+          <button class="send-btn" style="background: linear-gradient(135deg, #3b82f6, #2563eb); padding: 12px 18px; font-size: 14px; font-weight: 700; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(37,99,235,0.4);" onclick="triggerRazorpayCheckout('${orderId}', '${rzpOrderId}', ${amount})">
+            <span>💳 Open Razorpay Payment Window (₹${amount.toFixed(2)})</span>
+          </button>
+        `;
+        msgDiv.appendChild(payBtnContainer);
       }
 
       chatMessages.appendChild(msgDiv);
@@ -744,7 +764,41 @@
         </div>
       `;
 
-      document.body.appendChild(modalDiv);
+      const tabUpi = document.getElementById('tabUpi');
+      const tabCard = document.getElementById('tabCard');
+      const upiView = document.getElementById('upiView');
+
+      tabUpi.onclick = function() {
+        tabUpi.style.border = '1px solid #3b82f6';
+        tabUpi.style.background = 'rgba(59, 130, 246, 0.15)';
+        tabUpi.style.color = '#38bdf8';
+        tabCard.style.border = '1px solid #334155';
+        tabCard.style.background = 'transparent';
+        tabCard.style.color = '#94a3b8';
+        upiView.innerHTML = `
+          <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 6px;">Enter UPI ID</label>
+          <input type="text" value="success@razorpay" style="width: 100%; padding: 10px 14px; background: #090d16; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 14px; box-sizing: border-box;" readonly>
+          <div style="font-size: 11px; color: #10b981; margin-top: 4px;">✔ Test UPI ID (Auto-Approved)</div>
+        `;
+      };
+
+      tabCard.onclick = function() {
+        tabCard.style.border = '1px solid #3b82f6';
+        tabCard.style.background = 'rgba(59, 130, 246, 0.15)';
+        tabCard.style.color = '#38bdf8';
+        tabUpi.style.border = '1px solid #334155';
+        tabUpi.style.background = 'transparent';
+        tabUpi.style.color = '#94a3b8';
+        upiView.innerHTML = `
+          <label style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 6px;">Test Card Number</label>
+          <input type="text" value="4000 0000 0000 0002" style="width: 100%; padding: 10px 14px; background: #090d16; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 14px; box-sizing: border-box; margin-bottom: 8px;" readonly>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" value="12/30" style="flex: 1; padding: 8px 12px; background: #090d16; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 13px;" readonly>
+            <input type="text" value="123" style="flex: 1; padding: 8px 12px; background: #090d16; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 13px;" readonly>
+          </div>
+          <div style="font-size: 11px; color: #10b981; margin-top: 4px;">✔ Razorpay Test Card (Auto-Approved)</div>
+        `;
+      };
 
       document.getElementById('submitPayBtn').onclick = async function() {
         modalDiv.remove();
