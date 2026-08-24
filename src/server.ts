@@ -120,9 +120,9 @@ export function createApp() {
   app.get('/api/config', (_req: Request, res: Response) => {
     const brain = getAgentBrain();
     res.json({
-      keyId: RAZORPAY_CONFIG.keyId,
-      currency: RAZORPAY_CONFIG.currency,
-      isMock: RAZORPAY_CONFIG.isMock,
+      keyId: RAZORPAY_KEY_ID,
+      currency: 'INR',
+      isMock: isUsingMockKeys,
       llmProvider: brain.provider,
       isLiveLLM: brain.provider !== 'mock'
     });
@@ -261,7 +261,7 @@ if (process.argv[1] && process.argv[1].includes('server')) {
   app.listen(PORT, () => {
     console.log('\n' + '='.repeat(70));
     console.log(`🚀 Conversational Commerce Server running on http://localhost:${PORT}`);
-    console.log(`💳 Razorpay Mode:  ${RAZORPAY_CONFIG.isMock ? '⚠️  LOCAL SANDBOX MOCK' : '🟢 LIVE RAZORPAY TEST MODE (' + RAZORPAY_CONFIG.keyId + ')'}`);
+    console.log(`💳 Razorpay Mode:  ${isUsingMockKeys ? '⚠️  LOCAL SANDBOX MOCK' : '🟢 LIVE RAZORPAY TEST MODE (' + RAZORPAY_KEY_ID + ')'}`);
     console.log(`🧠 LLM Engine:     ${brain.provider === 'mock' ? '⚠️  MOCK BRAIN (Test Suite Mode)' : '🟢 LIVE LLM (' + brain.provider.toUpperCase() + ')'}`);
     console.log('='.repeat(70) + '\n');
   });
