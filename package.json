@@ -1,0 +1,31 @@
+{
+  "name": "conversational-razorpay-shopping-assistant",
+  "version": "1.0.0",
+  "description": "A trustworthy conversational AI shopping assistant powered by Razorpay",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "demo:day1": "tsx src/demo-day1.ts",
+    "build": "tsc"
+  },
+  "keywords": [
+    "ai",
+    "shopping-assistant",
+    "razorpay",
+    "conversational-commerce",
+    "fintech"
+  ],
+  "author": "Sai Sameer",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
