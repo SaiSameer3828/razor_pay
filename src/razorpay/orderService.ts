@@ -17,7 +17,7 @@ export async function createRazorpayOrder(params: CreateOrderParams): Promise<Ra
     throw new Error('INVALID_RECEIPT: Receipt identifier is required for tracking.');
   }
 
-  if (isUsingMockKeys) {
+  if (isUsingMockKeys()) {
     // Simulated Razorpay Order Object (100% compliant with Razorpay API schema)
     const mockOrderId = `order_${Math.random().toString(36).substring(2, 14)}`;
     return {

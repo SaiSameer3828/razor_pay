@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -9,7 +12,7 @@ import { getAgentBrain } from './llm/client.js';
 import { createRazorpayOrder } from './razorpay/orderService.js';
 import { verifyRazorpaySignature, generateTestSignature } from './razorpay/verifyPayment.js';
 import { verifyWebhookSignature, processWebhookEvent, RazorpayWebhookPayload } from './razorpay/webhookService.js';
-import { RAZORPAY_KEY_ID, isUsingMockKeys } from './razorpay/client.js';
+import { getRazorpayKeyId, isUsingMockKeys } from './razorpay/client.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -110,8 +113,8 @@ export function createApp() {
     res.json({
       status: 'ok',
       service: 'conversational-razorpay-shopping-assistant',
-      environment: isUsingMockKeys ? 'MOCK_SANDBOX' : 'LIVE_RAZORPAY_TEST_MODE',
-      isUsingMockKeys,
+      environment: isUsingMockKeys() ? 'MOCK_SANDBOX' : 'LIVE_RAZORPAY_TEST_MODE',
+      isUsingMockKeys: isUsingMockKeys(),
       timestamp: new Date().toISOString()
     });
   });
@@ -120,9 +123,9 @@ export function createApp() {
   app.get('/api/config', (_req: Request, res: Response) => {
     const brain = getAgentBrain();
     res.json({
-      keyId: RAZORPAY_KEY_ID,
+      keyId: getRazorpayKeyId(),
       currency: 'INR',
-      isMock: isUsingMockKeys,
+      isMock: isUsingMockKeys(),
       llmProvider: brain.provider,
       isLiveLLM: brain.provider !== 'mock'
     });
@@ -261,7 +264,7 @@ if (process.argv[1] && process.argv[1].includes('server')) {
   app.listen(PORT, () => {
     console.log('\n' + '='.repeat(70));
     console.log(`🚀 Conversational Commerce Server running on http://localhost:${PORT}`);
-    console.log(`💳 Razorpay Mode:  ${isUsingMockKeys ? '⚠️  LOCAL SANDBOX MOCK' : '🟢 LIVE RAZORPAY TEST MODE (' + RAZORPAY_KEY_ID + ')'}`);
+    console.log(`💳 Razorpay Mode:  ${isUsingMockKeys() ? '⚠️  LOCAL SANDBOX MOCK' : '🟢 LIVE RAZORPAY TEST MODE (' + getRazorpayKeyId() + ')'}`);
     console.log(`🧠 LLM Engine:     ${brain.provider === 'mock' ? '⚠️  MOCK BRAIN (Test Suite Mode)' : '🟢 LIVE LLM (' + brain.provider.toUpperCase() + ')'}`);
     console.log('='.repeat(70) + '\n');
   });
