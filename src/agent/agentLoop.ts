@@ -4,6 +4,9 @@ import { getCartSummary, addToCart } from '../cart/cartManager.js';
 import { evaluateCartRisk } from '../security/riskEngine.js';
 import { interceptNearHallucination } from '../recovery/hallucinationGuard.js';
 import { getUpsellRecommendation } from '../recommendations/upsellEngine.js';
+import { getAgentBrain } from '../llm/client.js';
+import { AGENT_TOOLS } from './tools.js';
+import { recordAuditLog } from '../audit/auditLogger.js';
 import {
   getSessionGate,
   recordExplicitHumanConfirmation
@@ -51,6 +54,64 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
   const thoughtSteps: AgentThoughtStep[] = [];
   let assistantReply = '';
 
+  // =========================================================================
+  // LIVE LLM FUNCTION-CALLING REACT LOOP (Active when ANTHROPIC_API_KEY or OPENAI_API_KEY is set)
+  // =========================================================================
+  const brain = getAgentBrain();
+  if (brain.provider !== 'mock') {
+    const systemPrompt = `You are a Conversational AI Shopping Assistant connected to a Razorpay checkout backend.
+Rules:
+1. Grounding: Search our store catalog using 'search_catalog' or 'get_product_details'. Never invent prices or SKUs.
+2. Human-in-the-Loop Confirmation Gate: When a customer asks to checkout, always call 'present_order_summary_for_review' first. Never call 'initiate_payment' unless the customer has explicitly confirmed the review summary in the prior step.
+3. Cart: Use 'add_to_cart', 'update_cart_quantity', 'remove_from_cart', 'get_cart_summary', and 'apply_coupon'.`;
+
+    let currentStep = 0;
+    while (currentStep < MAX_REACT_STEPS) {
+      currentStep++;
+      const llmResult = await brain.generateCompletion(session.history, AGENT_TOOLS, { systemPrompt });
+
+      if (llmResult.thought) {
+        thoughtSteps.push({ stepIndex: currentStep, thought: llmResult.thought });
+      }
+
+      if (llmResult.toolCalls && llmResult.toolCalls.length > 0) {
+        for (const tc of llmResult.toolCalls) {
+          const res = await dispatchToolCall(sessionId, tc.name, tc.arguments, tc.id);
+          thoughtSteps.push({
+            stepIndex: currentStep,
+            thought: llmResult.thought || `Executing ${tc.name}`,
+            action: { tool: tc.name, args: tc.arguments },
+            observation: res.result
+          });
+
+          session.history.push({ role: 'assistant', content: `[Invoking tool: ${tc.name} with ${JSON.stringify(tc.arguments)}]` });
+          session.history.push({ role: 'user', content: `[Tool result: ${JSON.stringify(res.result)}]` });
+        }
+      } else if (llmResult.text) {
+        assistantReply = llmResult.text;
+        break;
+      }
+    }
+
+    if (!assistantReply) {
+      const currentCart = getCartSummary(sessionId);
+      assistantReply = `I've updated your shopping cart (${currentCart.totalQuantity} items, total: ₹${currentCart.pricing.totalInRupees.toFixed(2)}). How else can I assist you?`;
+    }
+
+    session.history.push({ role: 'assistant', content: assistantReply });
+
+    return {
+      sessionId,
+      userMessage,
+      assistantReply,
+      thoughtSteps,
+      cartSummary: getCartSummary(sessionId)
+    };
+  }
+
+  // =========================================================================
+  // MOCK/DETERMINISTIC CONVERSATIONAL FALLBACK (For offline CI/CD test suites & demos)
+  // =========================================================================
   const lowerMsg = userMessage.toLowerCase().trim();
   const gate = getSessionGate(sessionId);
 
