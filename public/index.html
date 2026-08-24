@@ -364,7 +364,10 @@
         <span>🛍️</span>
         <span>AI Shopping Assistant</span>
       </div>
-      <a href="/checkout-demo.html" style="color: var(--primary); font-size: 11px; text-decoration: none;">Direct Razorpay Demo →</a>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span id="rzpBadge" class="badge-status badge-live" style="font-size: 10px;">💳 RAZORPAY TEST</span>
+        <span id="llmBadge" class="badge-status" style="font-size: 10px; background: rgba(139,92,246,0.15); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3);">🧠 LLM READY</span>
+      </div>
     </div>
 
     <div class="chat-messages" id="chatMessages">
@@ -451,6 +454,35 @@
 
   <script>
     const SESSION_ID = 'session_web_' + Date.now();
+
+    // 0. Fetch Config & Update Header Badges
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        const cfg = await res.json();
+        
+        const rzpBadge = document.getElementById('rzpBadge');
+        if (cfg.isMock) {
+          rzpBadge.innerHTML = '⚠️ MOCK GATEWAY';
+          rzpBadge.style.color = '#f59e0b';
+          rzpBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+        } else {
+          rzpBadge.innerHTML = '🟢 LIVE RAZORPAY';
+        }
+
+        const llmBadge = document.getElementById('llmBadge');
+        if (cfg.isLiveLLM) {
+          llmBadge.innerHTML = `🟢 LIVE ${cfg.llmProvider.toUpperCase()}`;
+          llmBadge.style.color = '#34d399';
+        } else {
+          llmBadge.innerHTML = '⚠️ MOCK BRAIN (TEST)';
+          llmBadge.style.color = '#94a3b8';
+        }
+      } catch (e) {
+        console.error('Config fetch failed:', e);
+      }
+    }
+    loadConfig();
 
     // 1. Establish Server-Sent Events (SSE) Live Audit Stream (Session Scoped)
     function initAuditStream() {

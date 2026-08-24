@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { createOrderFromCart, getOrderById, updateOrderStatus } from './orders/orderManager.js';
 import { runAgentTurn } from './agent/agentLoop.js';
 import { subscribeToAuditStream, getAuditLogsForSession, getAllAuditLogs } from './audit/auditLogger.js';
+import { getAgentBrain } from './llm/client.js';
 import { createRazorpayOrder } from './razorpay/orderService.js';
 import { verifyRazorpaySignature, generateTestSignature } from './razorpay/verifyPayment.js';
 import { verifyWebhookSignature, processWebhookEvent, RazorpayWebhookPayload } from './razorpay/webhookService.js';
@@ -115,12 +116,15 @@ export function createApp() {
     });
   });
 
-  // Public Configuration
+  // Public Config for Frontend (Key ID only - Secrets NEVER exposed)
   app.get('/api/config', (_req: Request, res: Response) => {
+    const brain = getAgentBrain();
     res.json({
-      razorpayKeyId: RAZORPAY_KEY_ID,
-      environment: isUsingMockKeys ? 'MOCK_SANDBOX' : 'LIVE_RAZORPAY_TEST_MODE',
-      isUsingMockKeys
+      keyId: RAZORPAY_CONFIG.keyId,
+      currency: RAZORPAY_CONFIG.currency,
+      isMock: RAZORPAY_CONFIG.isMock,
+      llmProvider: brain.provider,
+      isLiveLLM: brain.provider !== 'mock'
     });
   });
 
@@ -252,15 +256,13 @@ export function createApp() {
 if (process.argv[1] && process.argv[1].includes('server')) {
   const PORT = process.env.PORT || 3000;
   const app = createApp();
+  const brain = getAgentBrain();
+
   app.listen(PORT, () => {
-    console.log('='.repeat(70));
-    console.log(`🚀 Razorpay Shopping Backend Server running on http://localhost:${PORT}`);
-    if (isUsingMockKeys) {
-      console.log('⚠️  MODE: LOCAL SANDBOX MOCK (Set RAZORPAY_KEY_ID in .env for Live Test Mode)');
-    } else {
-      console.log(`✅ MODE: LIVE RAZORPAY TEST MODE (Key: ${RAZORPAY_KEY_ID})`);
-    }
-    console.log(`💳 Open http://localhost:${PORT}/checkout-demo.html to test payment modal.`);
+    console.log('\n' + '='.repeat(70));
+    console.log(`🚀 Conversational Commerce Server running on http://localhost:${PORT}`);
+    console.log(`💳 Razorpay Mode:  ${RAZORPAY_CONFIG.isMock ? '⚠️  LOCAL SANDBOX MOCK' : '🟢 LIVE RAZORPAY TEST MODE (' + RAZORPAY_CONFIG.keyId + ')'}`);
+    console.log(`🧠 LLM Engine:     ${brain.provider === 'mock' ? '⚠️  MOCK BRAIN (Test Suite Mode)' : '🟢 LIVE LLM (' + brain.provider.toUpperCase() + ')'}`);
     console.log('='.repeat(70) + '\n');
   });
 }
