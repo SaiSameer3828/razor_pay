@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createOrderFromCart, getOrderById, updateOrderStatus } from './orders/orderManager.js';
+import { runAgentTurn } from './agent/agentLoop.js';
 import { createRazorpayOrder } from './razorpay/orderService.js';
 import { verifyRazorpaySignature, generateTestSignature } from './razorpay/verifyPayment.js';
 import { verifyWebhookSignature, processWebhookEvent, RazorpayWebhookPayload } from './razorpay/webhookService.js';
@@ -47,6 +48,28 @@ export function createApp() {
   // Standard JSON body parser for all other application routes
   app.use(express.json());
   app.use(express.static(path.join(__dirname, '../public')));
+
+  // ==========================================
+  // DAY 4: CONVERSATIONAL AGENT CHAT ENDPOINT
+  // ==========================================
+  app.post('/api/chat', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { message, sessionId = 'default_session_user' } = req.body;
+
+      if (!message || typeof message !== 'string') {
+        res.status(400).json({ success: false, error: 'Valid message string is required.' });
+        return;
+      }
+
+      const response = await runAgentTurn(sessionId, message);
+      res.status(200).json({
+        success: true,
+        ...response
+      });
+    } catch (err) {
+      res.status(500).json({ success: false, error: (err as Error).message });
+    }
+  });
 
   // Mode & Health Check
   app.get('/api/health', (_req: Request, res: Response) => {

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conversational AI Shopping Assistant</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card-bg: #111827;
+      --panel-bg: #1e293b;
+      --border: #334155;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #10b981;
+      --purple: #8b5cf6;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Left: Chat & Reasoning Area */
+    .main-chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      border-right: 1px solid var(--border);
+    }
+
+    .top-header {
+      padding: 16px 24px;
+      background: #0f172a;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge-safe {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .message {
+      max-width: 80%;
+      padding: 14px 18px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: #2563eb;
+      color: #ffffff;
+      border-bottom-right-radius: 4px;
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-bottom-left-radius: 4px;
+    }
+
+    .thought-card {
+      background: rgba(139, 92, 246, 0.08);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+
+    .thought-header {
+      font-weight: 700;
+      color: #c4b5fd;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+
+    .thought-action {
+      font-family: monospace;
+      background: #0f172a;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: #67e8f9;
+      margin-top: 6px;
+      display: inline-block;
+    }
+
+    .chat-input-container {
+      padding: 16px 24px;
+      background: #0f172a;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+    }
+
+    .chat-input {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+
+    .chat-input:focus {
+      border-color: var(--primary);
+    }
+
+    .send-btn {
+      padding: 0 24px;
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .send-btn:hover {
+      background: var(--primary-hover);
+    }
+
+    /* Right: Real-Time Cart Drawer */
+    .cart-drawer {
+      width: 380px;
+      background: #0f172a;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .cart-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      font-size: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .cart-items-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .cart-item-card {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .cart-item-img {
+      width: 54px;
+      height: 54px;
+      border-radius: 6px;
+      object-fit: cover;
+      background: #334155;
+    }
+
+    .cart-item-info {
+      flex: 1;
+    }
+
+    .cart-item-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+
+    .cart-item-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .cart-item-price {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .cart-pricing-summary {
+      padding: 20px;
+      border-top: 1px solid var(--border);
+      background: #111827;
+    }
+
+    .price-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: var(--text-muted);
+    }
+
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      padding-top: 10px;
+      margin-top: 8px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .quick-chips {
+      display: flex;
+      gap: 8px;
+      padding: 8px 24px 0 24px;
+      overflow-x: auto;
+    }
+
+    .chip {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+
+    .chip:hover {
+      background: #334155;
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Left: Main Chat & ReAct Trace -->
+  <div class="main-chat-container">
+    <div class="top-header">
+      <div class="brand-title">
+        <span>🛍️</span>
+        <span>Conversational Shopping Assistant</span>
+        <span class="badge-safe">RE-ACT AGENT (SAFE TOOLS ONLY)</span>
+      </div>
+      <div>
+        <a href="/checkout-demo.html" style="color: var(--primary); font-size: 12px; text-decoration: none;">Isolated Razorpay Demo →</a>
+      </div>
+    </div>
+
+    <!-- Messages Window -->
+    <div class="chat-messages" id="chatMessages">
+      <div class="message assistant">
+        Hello! I am your AI Shopping Assistant. Tell me what you'd like to shop for today (e.g. <em>"add two blue shirts in size L"</em>, <em>"show me linen blazers"</em>, or <em>"what's in my cart?"</em>).
+      </div>
+    </div>
+
+    <!-- Quick Prompt Chips -->
+    <div class="quick-chips">
+      <div class="chip" onclick="sendQuickPrompt('Show me formal shirts')">👔 Formal Shirts</div>
+      <div class="chip" onclick="sendQuickPrompt('Add 2 Oxford shirts in blue size L')">➕ Add 2 Blue Shirts (L)</div>
+      <div class="chip" onclick="sendQuickPrompt('Show linen blazers for a wedding')">🧥 Linen Blazers</div>
+      <div class="chip" onclick="sendQuickPrompt('What is in my cart?')">🛒 View Cart</div>
+      <div class="chip" onclick="sendQuickPrompt('Apply coupon WELCOME10')">🎟️ WELCOME10 Coupon</div>
+    </div>
+
+    <!-- Input Bar -->
+    <div class="chat-input-container">
+      <input type="text" id="chatInput" class="chat-input" placeholder="Type a message (e.g., 'add two of the blue one in size L')..." onkeydown="if(event.key === 'Enter') sendMessage()">
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <!-- Right: Real-Time Cart Drawer -->
+  <div class="cart-drawer">
+    <div class="cart-header">
+      <span>🛒 Live Shopping Cart</span>
+      <span id="cartCountBadge" style="font-size: 12px; color: var(--text-muted);">0 items</span>
+    </div>
+
+    <div class="cart-items-list" id="cartItemsList">
+      <div style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 40px;">
+        Your cart is currently empty.
+      </div>
+    </div>
+
+    <div class="cart-pricing-summary">
+      <div class="price-row">
+        <span>Subtotal</span>
+        <span id="cartSubtotal">₹0.00</span>
+      </div>
+      <div class="price-row">
+        <span>GST (5%)</span>
+        <span id="cartTax">₹0.00</span>
+      </div>
+      <div class="price-row">
+        <span>Shipping</span>
+        <span id="cartShipping">FREE</span>
+      </div>
+      <div class="price-row" id="discountRow" style="display: none; color: var(--accent);">
+        <span id="discountLabel">Discount</span>
+        <span id="cartDiscount">-₹0.00</span>
+      </div>
+      <div class="total-row">
+        <span>Total Payable</span>
+        <span id="cartTotal" style="color: var(--accent);">₹0.00</span>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SESSION_ID = 'web_session_' + Date.now();
+
+    function sendQuickPrompt(text) {
+      document.getElementById('chatInput').value = text;
+      sendMessage();
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('chatInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      input.value = '';
+      appendMessage('user', text);
+
+      const sendBtn = document.getElementById('sendBtn');
+      sendBtn.disabled = true;
+      sendBtn.innerText = 'Thinking...';
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: SESSION_ID,
+            message: text
+          })
+        });
+
+        const data = await res.json();
+        sendBtn.disabled = false;
+        sendBtn.innerText = 'Send';
+
+        if (data.success) {
+          appendMessage('assistant', data.assistantReply, data.thoughtProcess);
+          updateCartUI(data.cartSummary);
+        } else {
+          appendMessage('assistant', '⚠️ Error: ' + (data.error || 'Failed to process message'));
+        }
+      } catch (err) {
+        sendBtn.disabled = false;
+        sendBtn.innerText = 'Send';
+        appendMessage('assistant', '⚠️ Network error: ' + err.message);
+      }
+    }
+
+    function appendMessage(role, text, thoughtProcess) {
+      const chatMessages = document.getElementById('chatMessages');
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${role}`;
+
+      if (thoughtProcess && thoughtProcess.length > 0) {
+        thoughtProcess.forEach(step => {
+          const thoughtDiv = document.createElement('div');
+          thoughtDiv.className = 'thought-card';
+          thoughtDiv.innerHTML = `
+            <div class="thought-header">🧠 Step ${step.stepIndex} Thought:</div>
+            <div>${step.thought}</div>
+            ${step.action ? `<div class="thought-action">⚡ Action: ${step.action.tool}(${JSON.stringify(step.action.args)})</div>` : ''}
+          `;
+          msgDiv.appendChild(thoughtDiv);
+        });
+      }
+
+      const textDiv = document.createElement('div');
+      textDiv.innerHTML = text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      msgDiv.appendChild(textDiv);
+
+      chatMessages.appendChild(msgDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    function updateCartUI(summary) {
+      if (!summary) return;
+
+      document.getElementById('cartCountBadge').innerText = `${summary.totalQuantity} item(s)`;
+      const itemsContainer = document.getElementById('cartItemsList');
+      itemsContainer.innerHTML = '';
+
+      if (summary.items.length === 0) {
+        itemsContainer.innerHTML = '<div style="text-align: center; color: var(--text-muted); font-size: 13px; margin-top: 40px;">Your cart is currently empty.</div>';
+      } else {
+        summary.items.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'cart-item-card';
+          card.innerHTML = `
+            <img src="${item.featuredImage}" class="cart-item-img" alt="${item.productName}">
+            <div class="cart-item-info">
+              <div class="cart-item-title">${item.productName}</div>
+              <div class="cart-item-meta">${item.color || ''} • ${item.size || ''} • Qty: ${item.quantity}</div>
+              <div class="cart-item-price">₹${(item.totalPriceInPaise / 100).toFixed(2)}</div>
+            </div>
+          `;
+          itemsContainer.appendChild(card);
+        });
+      }
+
+      const p = summary.pricing;
+      document.getElementById('cartSubtotal').innerText = `₹${p.subtotalInRupees.toFixed(2)}`;
+      document.getElementById('cartTax').innerText = `₹${p.taxInRupees.toFixed(2)}`;
+      document.getElementById('cartShipping').innerText = p.shippingFeeInRupees === 0 ? 'FREE' : `₹${p.shippingFeeInRupees.toFixed(2)}`;
+
+      const discountRow = document.getElementById('discountRow');
+      if (p.discountInRupees > 0) {
+        discountRow.style.display = 'flex';
+        document.getElementById('discountLabel').innerText = `Discount (${p.couponCode})`;
+        document.getElementById('cartDiscount').innerText = `-₹${p.discountInRupees.toFixed(2)}`;
+      } else {
+        discountRow.style.display = 'none';
+      }
+
+      document.getElementById('cartTotal').innerText = `₹${p.totalInRupees.toFixed(2)}`;
+    }
+  </script>
+</body>
+</html>
