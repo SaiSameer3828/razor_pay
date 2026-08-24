@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Conversational AI Shopping Assistant (with Live Reasoning & Audit Trail)</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <style>
     :root {
       --bg: #090d16;
@@ -615,8 +616,89 @@
         msgDiv.appendChild(btnContainer);
       }
 
+      // If message is an Order Created response, inject direct Razorpay Checkout Launch button
+      if (text.includes('Order #') && text.includes('Created!')) {
+        const matchOrderId = text.match(/Order #(ord_[a-zA-Z0-9_]+)/);
+        const matchRzpId = text.match(/`([a-zA-Z0-9_]+)`/);
+        const matchAmount = text.match(/₹([0-9.]+)/);
+
+        const orderId = matchOrderId ? matchOrderId[1] : '';
+        const rzpOrderId = matchRzpId ? matchRzpId[1] : '';
+        const amount = matchAmount ? parseFloat(matchAmount[1]) : 0;
+
+        const payBtnContainer = document.createElement('div');
+        payBtnContainer.style.marginTop = '12px';
+        payBtnContainer.innerHTML = `
+          <button class="send-btn" style="background: #3b82f6; padding: 10px 16px; font-weight: 700; width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="triggerRazorpayCheckout('${orderId}', '${rzpOrderId}', ${amount})">
+            <span>💳 Open Razorpay Payment Window (UPI / Card / Netbanking)</span>
+          </button>
+        `;
+        msgDiv.appendChild(payBtnContainer);
+
+        // Auto open if desired
+        setTimeout(() => {
+          triggerRazorpayCheckout(orderId, rzpOrderId, amount);
+        }, 500);
+      }
+
       chatMessages.appendChild(msgDiv);
       chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    let publicConfig = { keyId: 'rzp_test_TTfktoaASRcU9E', currency: 'INR' };
+
+    async function triggerRazorpayCheckout(internalOrderId, razorpayOrderId, amountInRupees) {
+      if (!window.Razorpay) {
+        alert('Razorpay Checkout SDK is loading, please try again in a moment.');
+        return;
+      }
+
+      const amountInPaise = Math.round(amountInRupees * 100);
+
+      const options = {
+        key: publicConfig.keyId || 'rzp_test_TTfktoaASRcU9E',
+        amount: amountInPaise,
+        currency: 'INR',
+        name: 'AI Agent Store',
+        description: `Payment for Order #${internalOrderId}`,
+        order_id: razorpayOrderId,
+        handler: async function (response) {
+          appendChatMessage('assistant', `⏳ Verifying cryptographic signature for Payment ID \`${response.razorpay_payment_id}\`...`);
+          try {
+            const verifyRes = await fetch('/api/payment/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                order_id: response.razorpay_order_id,
+                payment_id: response.razorpay_payment_id,
+                signature: response.razorpay_signature
+              })
+            });
+            const verifyData = await verifyRes.json();
+            if (verifyData.verified) {
+              appendChatMessage('assistant', `🎉 **Payment Successful & Verified!**\n\n• **Payment ID:** \`${response.razorpay_payment_id}\`\n• **Status:** CAPTURED ✅\n\nYour items are being packed and prepared for dispatch!`);
+            } else {
+              appendChatMessage('assistant', `⚠️ **Signature Verification Failed**: Payment could not be validated.`);
+            }
+          } catch (e) {
+            appendChatMessage('assistant', `⚠️ Payment verification error: ${e.message}`);
+          }
+        },
+        prefill: {
+          name: 'Sai Sameer',
+          email: 'sameer@example.com',
+          contact: '9999999999'
+        },
+        theme: {
+          color: '#3b82f6'
+        }
+      };
+
+      const rzp = new Razorpay(options);
+      rzp.on('payment.failed', function (response) {
+        appendChatMessage('assistant', `⚠️ **Payment Failed / Declined**: ${response.error.description || 'Transaction declined by bank'}. Your cart is safe!`);
+      });
+      rzp.open();
     }
 
     function updateCartUI(summary) {
