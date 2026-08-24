@@ -1,8 +1,9 @@
 import { dispatchToolCall } from './toolDispatcher.js';
 import { AgentResponse, AgentThoughtStep } from './types.js';
-import { getCartSummary } from '../cart/cartManager.js';
+import { getCartSummary, addToCart } from '../cart/cartManager.js';
 import { evaluateCartRisk } from '../security/riskEngine.js';
 import { interceptNearHallucination } from '../recovery/hallucinationGuard.js';
+import { getUpsellRecommendation } from '../recommendations/upsellEngine.js';
 import {
   getSessionGate,
   recordExplicitHumanConfirmation
@@ -81,6 +82,32 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
       thoughtSteps,
       cartSummary: getCartSummary(sessionId)
     };
+  }
+
+  // Handle Upsell Acceptance Intent
+  if (lowerMsg.includes('add tie') || lowerMsg.includes('add the tie') || lowerMsg.includes('add recommendation') || lowerMsg.includes('add upsell')) {
+    const summary = getCartSummary(sessionId);
+    const upsell = getUpsellRecommendation(summary);
+    if (upsell.eligible && upsell.recommendedProduct && upsell.recommendedVariant) {
+      const addRes = addToCart(sessionId, upsell.recommendedProduct.id, upsell.recommendedVariant.id, 1);
+      const newSummary = getCartSummary(sessionId);
+
+      const step: AgentThoughtStep = {
+        stepIndex: 1,
+        thought: `User accepted upsell recommendation. Adding ${upsell.recommendedProduct.name} to cart.`
+      };
+      step.action = { tool: 'add_to_cart', args: { product_id: upsell.recommendedProduct.id, variant_id: upsell.recommendedVariant.id, quantity: 1 } };
+      step.observation = addRes;
+      thoughtSteps.push(step);
+
+      return {
+        sessionId,
+        userMessage,
+        assistantReply: `✨ Added **${upsell.recommendedProduct.name}** (${upsell.recommendedVariant.color}) to your cart! 👔\n\nYour updated cart total is **₹${newSummary.pricing.totalInRupees.toFixed(2)}** (${newSummary.totalQuantity} items). Ready to checkout?`,
+        thoughtSteps,
+        cartSummary: newSummary
+      };
+    }
   }
 
   if (isExplicitConfirmation && gate.state === 'REVIEWING_ORDER') {
@@ -251,7 +278,13 @@ export async function runAgentTurn(sessionId: string, userMessage: string): Prom
 
         if (addRes.result.success) {
           const currentSummary = getCartSummary(sessionId);
-          assistantReply = `Added **${quantity}x ${selectedProduct.name}** (${selectedVariant.color ?? ''} ${selectedVariant.size ?? ''}) to your cart! 🛍️\n\nYour cart total is **₹${currentSummary.pricing.totalInRupees.toFixed(2)}** (${currentSummary.totalQuantity} items). Ready to checkout?`;
+          const upsell = getUpsellRecommendation(currentSummary);
+          let upsellPitchText = '';
+          if (upsell.eligible && upsell.pitchMessage) {
+            upsellPitchText = `\n\n${upsell.pitchMessage}\n*(Reply with 'add the ${upsell.recommendedProduct?.name.toLowerCase().includes('tie') ? 'tie' : 'recommendation'}' to include it!)*`;
+          }
+
+          assistantReply = `Added **${quantity}x ${selectedProduct.name}** (${selectedVariant.color ?? ''} ${selectedVariant.size ?? ''}) to your cart! 🛍️${upsellPitchText}\n\nYour cart total is **₹${currentSummary.pricing.totalInRupees.toFixed(2)}** (${currentSummary.totalQuantity} items). Ready to checkout?`;
         } else {
           assistantReply = `⚠️ I couldn't add that item: ${addRes.result.message}`;
         }
