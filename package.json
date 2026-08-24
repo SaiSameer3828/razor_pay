@@ -7,6 +7,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "demo:day1": "tsx src/demo-day1.ts",
+    "start:server": "tsx src/server.ts",
     "build": "tsc"
   },
   "keywords": [
@@ -20,9 +21,14 @@
   "license": "MIT",
   "type": "module",
   "dependencies": {
-    "dotenv": "^16.4.7"
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^5.2.1",
+    "razorpay": "^2.9.8"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.13.4",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",

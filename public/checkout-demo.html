@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Razorpay Test Mode (Isolated Checkout Demo)</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #10b981;
+      --danger: #ef4444;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 580px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--primary);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .card-section {
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .amount-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      margin-bottom: 16px;
+    }
+
+    .amount-btn {
+      flex: 1;
+      padding: 10px;
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .amount-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
+    .input-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .amount-input {
+      width: 100%;
+      padding: 12px;
+      background: #1e293b;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 18px;
+      font-weight: 700;
+      margin-top: 6px;
+    }
+
+    .pay-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.2s ease;
+    }
+
+    .pay-btn:hover {
+      background: var(--primary-hover);
+    }
+
+    .pay-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .test-notes {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      color: #a7f3d0;
+      margin-top: 16px;
+      line-height: 1.6;
+    }
+
+    .status-card {
+      display: none;
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    .status-success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid var(--accent);
+      color: #6ee7b7;
+    }
+
+    .status-error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+    }
+
+    pre.code-block {
+      background: #020617;
+      padding: 12px;
+      border-radius: 6px;
+      font-family: monospace;
+      font-size: 11px;
+      color: #94a3b8;
+      overflow-x: auto;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <div class="badge">TEST MODE EXPERIMENT</div>
+      <h1>Isolated Razorpay Checkout</h1>
+      <p class="subtitle">Simulate order creation and verified payment settlement before connecting agentic logic.</p>
+    </div>
+
+    <div class="card-section">
+      <label class="input-label">Select Test Amount (INR):</label>
+      <div class="amount-group">
+        <button class="amount-btn active" onclick="setAmount(500)">₹500</button>
+        <button class="amount-btn" onclick="setAmount(1200)">₹1,200</button>
+        <button class="amount-btn" onclick="setAmount(2500)">₹2,500</button>
+      </div>
+
+      <label class="input-label">Amount in Rupees:</label>
+      <input type="number" id="amountInput" class="amount-input" value="500" min="1" oninput="clearActiveButtons()">
+    </div>
+
+    <button id="payBtn" class="pay-btn" onclick="handlePayment()">
+      <span>🔒 Checkout with Razorpay</span>
+    </button>
+
+    <div class="test-notes">
+      <strong>💡 Razorpay Test Mode Card Details:</strong><br>
+      • <strong>Card Number:</strong> Any test card (e.g. <code>4111 1111 1111 1111</code> or <code>4000 0000 0000 0002</code>)<br>
+      • <strong>Expiry:</strong> Any future date (e.g. <code>12/28</code>) | <strong>CVV:</strong> <code>123</code><br>
+      • <strong>UPI:</strong> <code>success@razorpay</code>
+    </div>
+
+    <div id="statusBox" class="status-card">
+      <div id="statusTitle" style="font-weight: 700; margin-bottom: 6px;"></div>
+      <div id="statusDetails"></div>
+      <pre id="rawLog" class="code-block"></pre>
+    </div>
+  </div>
+
+  <script>
+    let currentAmount = 500;
+
+    function setAmount(val) {
+      currentAmount = val;
+      document.getElementById('amountInput').value = val;
+      document.querySelectorAll('.amount-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.innerText === `₹${val.toLocaleString('en-IN')}`);
+      });
+    }
+
+    function clearActiveButtons() {
+      currentAmount = Number(document.getElementById('amountInput').value) || 1;
+      document.querySelectorAll('.amount-btn').forEach(btn => btn.classList.remove('active'));
+    }
+
+    async function handlePayment() {
+      const payBtn = document.getElementById('payBtn');
+      const statusBox = document.getElementById('statusBox');
+      const statusTitle = document.getElementById('statusTitle');
+      const statusDetails = document.getElementById('statusDetails');
+      const rawLog = document.getElementById('rawLog');
+
+      payBtn.disabled = true;
+      payBtn.innerHTML = '⏳ Creating Order...';
+      statusBox.style.display = 'none';
+
+      try {
+        const amount = Number(document.getElementById('amountInput').value);
+        if (!amount || amount <= 0) {
+          throw new Error('Please enter a valid positive amount.');
+        }
+
+        // 1. Create Order on Backend
+        const orderRes = await fetch('/api/payment/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amountInRupees: amount })
+        });
+
+        const orderData = await orderRes.json();
+        if (!orderData.success) {
+          throw new Error(orderData.error || 'Failed to create Razorpay Order.');
+        }
+
+        const { order, keyId, isUsingMockKeys } = orderData;
+
+        // If in mock sandbox mode without live Razorpay keys, offer simulated instant checkout
+        if (isUsingMockKeys || typeof Razorpay === 'undefined') {
+          payBtn.innerHTML = '⚙️ Simulating Razorpay 2FA...';
+          const mockRes = await fetch('/api/payment/mock-complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: order.id })
+          });
+          const mockData = await mockRes.json();
+
+          // Verify signature on backend
+          await verifyOnBackend(mockData.simulatedPayload);
+          return;
+        }
+
+        // 2. Launch Razorpay Standard Checkout Modal
+        const options = {
+          key: keyId,
+          amount: order.amount,
+          currency: order.currency,
+          name: 'AI Shopping Assistant',
+          description: `Payment for Order #${order.id}`,
+          image: 'https://images.unsplash.com/photo-1598033129183-c4f50c736f10?w=120&auto=format&fit=crop',
+          order_id: order.id,
+          handler: async function (response) {
+            payBtn.innerHTML = '🔐 Verifying Signature...';
+            await verifyOnBackend(response);
+          },
+          prefill: {
+            name: 'Sai Sameer',
+            email: 'saisameer@example.com',
+            contact: '9999999999'
+          },
+          theme: {
+            color: '#3b82f6'
+          },
+          modal: {
+            ondismiss: function() {
+              payBtn.disabled = false;
+              payBtn.innerHTML = '🔒 Checkout with Razorpay';
+            }
+          }
+        };
+
+        const rzp = new Razorpay(options);
+        rzp.on('payment.failed', function (response) {
+          statusBox.className = 'status-card status-error';
+          statusTitle.innerText = '❌ Payment Failed / Declined';
+          statusDetails.innerText = `Reason: ${response.error.description} (Code: ${response.error.code})`;
+          rawLog.innerText = JSON.stringify(response.error, null, 2);
+          statusBox.style.display = 'block';
+          payBtn.disabled = false;
+          payBtn.innerHTML = '🔒 Checkout with Razorpay';
+        });
+
+        rzp.open();
+      } catch (err) {
+        statusBox.className = 'status-card status-error';
+        statusTitle.innerText = '⚠️ Error';
+        statusDetails.innerText = err.message;
+        rawLog.innerText = '';
+        statusBox.style.display = 'block';
+        payBtn.disabled = false;
+        payBtn.innerHTML = '🔒 Checkout with Razorpay';
+      }
+    }
+
+    async function verifyOnBackend(paymentPayload) {
+      const payBtn = document.getElementById('payBtn');
+      const statusBox = document.getElementById('statusBox');
+      const statusTitle = document.getElementById('statusTitle');
+      const statusDetails = document.getElementById('statusDetails');
+      const rawLog = document.getElementById('rawLog');
+
+      const verifyRes = await fetch('/api/payment/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paymentPayload)
+      });
+
+      const verifyData = await verifyRes.json();
+      payBtn.disabled = false;
+      payBtn.innerHTML = '🔒 Checkout with Razorpay';
+
+      if (verifyData.success) {
+        statusBox.className = 'status-card status-success';
+        statusTitle.innerText = '✅ Payment Verified by Server HMAC Signature!';
+        statusDetails.innerHTML = `
+          <strong>Order ID:</strong> ${paymentPayload.razorpay_order_id}<br>
+          <strong>Payment ID:</strong> ${paymentPayload.razorpay_payment_id}<br>
+          <strong>Signature Status:</strong> Authentic & Cryptographically Verified
+        `;
+        rawLog.innerText = JSON.stringify(verifyData, null, 2);
+      } else {
+        statusBox.className = 'status-card status-error';
+        statusTitle.innerText = '❌ Server Signature Mismatch!';
+        statusDetails.innerText = verifyData.message;
+        rawLog.innerText = JSON.stringify(verifyData, null, 2);
+      }
+      statusBox.style.display = 'block';
+    }
+  </script>
+</body>
+</html>
