@@ -3,16 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Razorpay Test Mode (Isolated Checkout Demo)</title>
+  <title>Razorpay Test Mode & Webhook Architecture</title>
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   <style>
     :root {
-      --bg: #0f172a;
+      --bg: #0b1120;
       --card-bg: #1e293b;
       --border: #334155;
       --primary: #3b82f6;
       --primary-hover: #2563eb;
       --accent: #10b981;
+      --warning: #f59e0b;
       --danger: #ef4444;
       --text: #f8fafc;
       --text-muted: #94a3b8;
@@ -37,12 +38,36 @@
 
     .container {
       width: 100%;
-      max-width: 580px;
+      max-width: 640px;
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 16px;
       padding: 32px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+
+    .mode-banner {
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      border: 1px solid transparent;
+    }
+
+    .mode-banner.mock {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: #fde68a;
+    }
+
+    .mode-banner.live {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #6ee7b7;
     }
 
     .header {
@@ -50,124 +75,117 @@
       margin-bottom: 24px;
     }
 
-    .badge {
-      display: inline-block;
-      background: rgba(59, 130, 246, 0.15);
-      color: var(--primary);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      padding: 4px 12px;
-      border-radius: 9999px;
-      font-size: 12px;
-      font-weight: 600;
-      margin-bottom: 12px;
-      letter-spacing: 0.5px;
-    }
-
     h1 {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 700;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     p.subtitle {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.5;
     }
 
-    .card-section {
+    .section-box {
       background: #0f172a;
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
+      padding: 18px;
+      margin-bottom: 18px;
     }
 
-    .amount-group {
-      display: flex;
-      gap: 10px;
-      margin-top: 12px;
-      margin-bottom: 16px;
-    }
-
-    .amount-btn {
-      flex: 1;
-      padding: 10px;
-      background: #1e293b;
-      border: 1px solid var(--border);
-      color: var(--text);
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .amount-btn.active {
-      background: var(--primary);
-      border-color: var(--primary);
-    }
-
-    .input-label {
-      font-size: 13px;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-
-    .amount-input {
-      width: 100%;
-      padding: 12px;
-      background: #1e293b;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      color: var(--text);
-      font-size: 18px;
+    .section-title {
+      font-size: 14px;
       font-weight: 700;
-      margin-top: 6px;
+      color: var(--text);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
 
-    .pay-btn {
-      width: 100%;
-      padding: 14px;
+    .cart-item-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 13px;
+    }
+
+    .cart-item-row:last-child {
+      border-bottom: none;
+    }
+
+    .cart-total-row {
+      display: flex;
+      justify-content: space-between;
+      padding-top: 10px;
+      margin-top: 6px;
+      border-top: 1px dashed var(--border);
+      font-weight: 700;
+      color: var(--accent);
+      font-size: 15px;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .action-btn {
+      flex: 1;
+      padding: 13px;
       background: var(--primary);
       color: #ffffff;
       border: none;
       border-radius: 10px;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      transition: background 0.2s ease;
+      gap: 6px;
+      transition: all 0.2s ease;
     }
 
-    .pay-btn:hover {
+    .action-btn:hover {
       background: var(--primary-hover);
     }
 
-    .pay-btn:disabled {
+    .action-btn.secondary {
+      background: #334155;
+    }
+
+    .action-btn.secondary:hover {
+      background: #475569;
+    }
+
+    .action-btn:disabled {
       opacity: 0.6;
       cursor: not-allowed;
     }
 
     .test-notes {
-      background: rgba(16, 185, 129, 0.08);
-      border: 1px solid rgba(16, 185, 129, 0.2);
+      background: rgba(59, 130, 246, 0.08);
+      border: 1px solid rgba(59, 130, 246, 0.2);
       border-radius: 8px;
       padding: 12px;
       font-size: 12px;
-      color: #a7f3d0;
+      color: #93c5fd;
       margin-top: 16px;
       line-height: 1.6;
     }
 
     .status-card {
       display: none;
-      margin-top: 20px;
-      padding: 16px;
+      margin-top: 18px;
+      padding: 14px;
       border-radius: 10px;
-      font-size: 14px;
+      font-size: 13px;
     }
 
     .status-success {
@@ -184,7 +202,7 @@
 
     pre.code-block {
       background: #020617;
-      padding: 12px;
+      padding: 10px;
       border-radius: 6px;
       font-family: monospace;
       font-size: 11px;
@@ -197,33 +215,55 @@
 <body>
 
   <div class="container">
-    <div class="header">
-      <div class="badge">TEST MODE EXPERIMENT</div>
-      <h1>Isolated Razorpay Checkout</h1>
-      <p class="subtitle">Simulate order creation and verified payment settlement before connecting agentic logic.</p>
+    <!-- Loud Mode Banner -->
+    <div id="modeBanner" class="mode-banner mock">
+      <span id="modeText">⏳ Loading Configuration...</span>
+      <span id="keyTag" style="font-family: monospace; font-size: 11px;"></span>
     </div>
 
-    <div class="card-section">
-      <label class="input-label">Select Test Amount (INR):</label>
-      <div class="amount-group">
-        <button class="amount-btn active" onclick="setAmount(500)">₹500</button>
-        <button class="amount-btn" onclick="setAmount(1200)">₹1,200</button>
-        <button class="amount-btn" onclick="setAmount(2500)">₹2,500</button>
+    <div class="header">
+      <h1>Razorpay Cart-to-Checkout Pipeline</h1>
+      <p class="subtitle">Deterministic cart totals → Razorpay Order ID → Client 2FA & Server Webhook Verification.</p>
+    </div>
+
+    <!-- Live Hardcoded Test Cart Section -->
+    <div class="section-box">
+      <div class="section-title">
+        <span>🛒</span>
+        <span>Active Test Cart (Session: <code>session_demo_day3</code>)</span>
       </div>
 
-      <label class="input-label">Amount in Rupees:</label>
-      <input type="number" id="amountInput" class="amount-input" value="500" min="1" oninput="clearActiveButtons()">
+      <div class="cart-item-row">
+        <span>1x Classic Oxford Cotton Shirt (Blue, L)</span>
+        <span>₹1,899.00</span>
+      </div>
+      <div class="cart-item-row">
+        <span>1x Italian Tailored Linen Blazer (Navy, 40 M)</span>
+        <span>₹5,499.00</span>
+      </div>
+      <div class="cart-item-row" style="color: var(--text-muted);">
+        <span>Subtotal (7,398) + 5% GST (369.90) + Free Shipping</span>
+        <span>₹7,767.90</span>
+      </div>
+
+      <div class="cart-total-row">
+        <span>Total Payable (Deterministic in Paise)</span>
+        <span>₹7,767.90 (776790 paise)</span>
+      </div>
     </div>
 
-    <button id="payBtn" class="pay-btn" onclick="handlePayment()">
-      <span>🔒 Checkout with Razorpay</span>
-    </button>
+    <!-- Action Buttons -->
+    <div class="btn-group">
+      <button id="checkoutBtn" class="action-btn" onclick="handleCartCheckout()">
+        <span>🔒 Checkout Test Cart with Razorpay</span>
+      </button>
+    </div>
 
     <div class="test-notes">
-      <strong>💡 Razorpay Test Mode Card Details:</strong><br>
-      • <strong>Card Number:</strong> Any test card (e.g. <code>4111 1111 1111 1111</code> or <code>4000 0000 0000 0002</code>)<br>
-      • <strong>Expiry:</strong> Any future date (e.g. <code>12/28</code>) | <strong>CVV:</strong> <code>123</code><br>
-      • <strong>UPI:</strong> <code>success@razorpay</code>
+      <strong>💡 Razorpay Test Mode Credentials:</strong><br>
+      • <strong>Test Card:</strong> <code>4111 1111 1111 1111</code> | Expiry: <code>12/28</code> | CVV: <code>123</code><br>
+      • <strong>Test UPI:</strong> <code>success@razorpay</code><br>
+      • <strong>Webhooks:</strong> Verified asynchronously via <code>X-Razorpay-Signature</code> HMAC-SHA256.
     </div>
 
     <div id="statusBox" class="status-card">
@@ -234,92 +274,105 @@
   </div>
 
   <script>
-    let currentAmount = 500;
+    let appConfig = { isUsingMockKeys: true, razorpayKeyId: '' };
 
-    function setAmount(val) {
-      currentAmount = val;
-      document.getElementById('amountInput').value = val;
-      document.querySelectorAll('.amount-btn').forEach(btn => {
-        btn.classList.toggle('active', btn.innerText === `₹${val.toLocaleString('en-IN')}`);
-      });
+    // Fetch live environment configuration on load
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        appConfig = await res.json();
+
+        const banner = document.getElementById('modeBanner');
+        const modeText = document.getElementById('modeText');
+        const keyTag = document.getElementById('keyTag');
+
+        if (appConfig.isUsingMockKeys) {
+          banner.className = 'mode-banner mock';
+          modeText.innerHTML = '⚠️ MODE: LOCAL SANDBOX MOCK';
+          keyTag.innerText = 'rzp_test_mock_key';
+        } else {
+          banner.className = 'mode-banner live';
+          modeText.innerHTML = '🟢 MODE: LIVE RAZORPAY TEST MODE';
+          keyTag.innerText = appConfig.razorpayKeyId;
+        }
+      } catch (err) {
+        console.error('Config fetch failed:', err);
+      }
     }
 
-    function clearActiveButtons() {
-      currentAmount = Number(document.getElementById('amountInput').value) || 1;
-      document.querySelectorAll('.amount-btn').forEach(btn => btn.classList.remove('active'));
-    }
+    loadConfig();
 
-    async function handlePayment() {
-      const payBtn = document.getElementById('payBtn');
+    async function handleCartCheckout() {
+      const checkoutBtn = document.getElementById('checkoutBtn');
       const statusBox = document.getElementById('statusBox');
       const statusTitle = document.getElementById('statusTitle');
       const statusDetails = document.getElementById('statusDetails');
       const rawLog = document.getElementById('rawLog');
 
-      payBtn.disabled = true;
-      payBtn.innerHTML = '⏳ Creating Order...';
+      checkoutBtn.disabled = true;
+      checkoutBtn.innerHTML = '⏳ Creating Order from Cart...';
       statusBox.style.display = 'none';
 
       try {
-        const amount = Number(document.getElementById('amountInput').value);
-        if (!amount || amount <= 0) {
-          throw new Error('Please enter a valid positive amount.');
-        }
-
-        // 1. Create Order on Backend
-        const orderRes = await fetch('/api/payment/create-order', {
+        // Step 1: Call /api/cart/checkout which computes exact cart summary & creates Razorpay order
+        const checkoutRes = await fetch('/api/cart/checkout', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ amountInRupees: amount })
+          body: JSON.stringify({
+            cartId: 'session_demo_day3',
+            customerDetails: {
+              name: 'Sai Sameer',
+              email: 'saisameer@example.com',
+              phone: '9876543210'
+            }
+          })
         });
 
-        const orderData = await orderRes.json();
-        if (!orderData.success) {
-          throw new Error(orderData.error || 'Failed to create Razorpay Order.');
+        const checkoutData = await checkoutRes.json();
+        if (!checkoutData.success) {
+          throw new Error(checkoutData.message || 'Checkout creation failed.');
         }
 
-        const { order, keyId, isUsingMockKeys } = orderData;
+        const { order, razorpayOrder } = checkoutData;
 
-        // If in mock sandbox mode without live Razorpay keys, offer simulated instant checkout
-        if (isUsingMockKeys || typeof Razorpay === 'undefined') {
-          payBtn.innerHTML = '⚙️ Simulating Razorpay 2FA...';
+        // In Mock mode or if Razorpay CDN is not loaded, simulate complete 2FA payment
+        if (appConfig.isUsingMockKeys || typeof Razorpay === 'undefined') {
+          checkoutBtn.innerHTML = '⚙️ Simulating Razorpay 2FA...';
           const mockRes = await fetch('/api/payment/mock-complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId: order.id })
+            body: JSON.stringify({ orderId: razorpayOrder.id })
           });
           const mockData = await mockRes.json();
 
           // Verify signature on backend
-          await verifyOnBackend(mockData.simulatedPayload);
+          await verifyPaymentOnBackend(mockData.simulatedPayload, order.id);
           return;
         }
 
-        // 2. Launch Razorpay Standard Checkout Modal
+        // Launch Razorpay Modal
         const options = {
-          key: keyId,
-          amount: order.amount,
-          currency: order.currency,
+          key: razorpayOrder.keyId,
+          amount: razorpayOrder.amount,
+          currency: razorpayOrder.currency,
           name: 'AI Shopping Assistant',
-          description: `Payment for Order #${order.id}`,
+          description: `Order #${order.id}`,
           image: 'https://images.unsplash.com/photo-1598033129183-c4f50c736f10?w=120&auto=format&fit=crop',
-          order_id: order.id,
+          order_id: razorpayOrder.id,
           handler: async function (response) {
-            payBtn.innerHTML = '🔐 Verifying Signature...';
-            await verifyOnBackend(response);
+            checkoutBtn.innerHTML = '🔐 Verifying Signature...';
+            await verifyPaymentOnBackend(response, order.id);
           },
           prefill: {
-            name: 'Sai Sameer',
-            email: 'saisameer@example.com',
-            contact: '9999999999'
+            name: order.customerDetails?.name || 'Sai Sameer',
+            email: order.customerDetails?.email || 'saisameer@example.com',
+            contact: order.customerDetails?.phone || '9876543210'
           },
-          theme: {
-            color: '#3b82f6'
-          },
+          theme: { color: '#3b82f6' },
           modal: {
             ondismiss: function() {
-              payBtn.disabled = false;
-              payBtn.innerHTML = '🔒 Checkout with Razorpay';
+              checkoutBtn.disabled = false;
+              checkoutBtn.innerHTML = '🔒 Checkout Test Cart with Razorpay';
             }
           }
         };
@@ -331,8 +384,8 @@
           statusDetails.innerText = `Reason: ${response.error.description} (Code: ${response.error.code})`;
           rawLog.innerText = JSON.stringify(response.error, null, 2);
           statusBox.style.display = 'block';
-          payBtn.disabled = false;
-          payBtn.innerHTML = '🔒 Checkout with Razorpay';
+          checkoutBtn.disabled = false;
+          checkoutBtn.innerHTML = '🔒 Checkout Test Cart with Razorpay';
         });
 
         rzp.open();
@@ -342,13 +395,13 @@
         statusDetails.innerText = err.message;
         rawLog.innerText = '';
         statusBox.style.display = 'block';
-        payBtn.disabled = false;
-        payBtn.innerHTML = '🔒 Checkout with Razorpay';
+        checkoutBtn.disabled = false;
+        checkoutBtn.innerHTML = '🔒 Checkout Test Cart with Razorpay';
       }
     }
 
-    async function verifyOnBackend(paymentPayload) {
-      const payBtn = document.getElementById('payBtn');
+    async function verifyPaymentOnBackend(paymentPayload, internalOrderId) {
+      const checkoutBtn = document.getElementById('checkoutBtn');
       const statusBox = document.getElementById('statusBox');
       const statusTitle = document.getElementById('statusTitle');
       const statusDetails = document.getElementById('statusDetails');
@@ -361,21 +414,22 @@
       });
 
       const verifyData = await verifyRes.json();
-      payBtn.disabled = false;
-      payBtn.innerHTML = '🔒 Checkout with Razorpay';
+      checkoutBtn.disabled = false;
+      checkoutBtn.innerHTML = '🔒 Checkout Test Cart with Razorpay';
 
       if (verifyData.success) {
         statusBox.className = 'status-card status-success';
-        statusTitle.innerText = '✅ Payment Verified by Server HMAC Signature!';
+        statusTitle.innerText = '✅ Payment Verified & Order Captured!';
         statusDetails.innerHTML = `
-          <strong>Order ID:</strong> ${paymentPayload.razorpay_order_id}<br>
+          <strong>Internal Order ID:</strong> ${internalOrderId}<br>
+          <strong>Razorpay Order ID:</strong> ${paymentPayload.razorpay_order_id}<br>
           <strong>Payment ID:</strong> ${paymentPayload.razorpay_payment_id}<br>
-          <strong>Signature Status:</strong> Authentic & Cryptographically Verified
+          <strong>Verification:</strong> Authenticated via HMAC-SHA256 signature
         `;
         rawLog.innerText = JSON.stringify(verifyData, null, 2);
       } else {
         statusBox.className = 'status-card status-error';
-        statusTitle.innerText = '❌ Server Signature Mismatch!';
+        statusTitle.innerText = '❌ Verification Failed!';
         statusDetails.innerText = verifyData.message;
         rawLog.innerText = JSON.stringify(verifyData, null, 2);
       }
